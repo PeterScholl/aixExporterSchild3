@@ -8,7 +8,7 @@ base_url = f"https://nightly.svws-nrw.de/db/{schema}"
 username = "admin"  # Beispiel: Benutzername (ggf. anpassen)
 password = ""   # Beispiel: Passwort (ggf. anpassen)
 jahr = 2018
-abschnitt = 2
+abschnitt = 1
 
 # --- Authentifizierung ---
 auth = (username, password)
@@ -122,7 +122,7 @@ def mapIdZuKuerzel(kf_liste: list) -> dict:
 abschnitts_id = gibIdSchuljahresabschnitt(jahr, abschnitt)
 
 if abschnitts_id:
-    print(f"✅ Gefundene ID des Schuljahresabschnitts: {abschnitts_id}")
+    print(f"✅ Gefundene ID des Schuljahresabschnitts ({jahr}.{abschnitt}): {abschnitts_id}")
 else:
     print("⚠️ Kein passender Schuljahresabschnitt gefunden!")
     sys.exit(0)
@@ -160,8 +160,7 @@ with open("schueler_export.csv", mode="w", newline="", encoding="utf-8") as csvf
 
     count = 0
     for s in schueler_liste:
-        count += 1
-        if (count>300): break
+        if (count>10): break
 
         gu_id = s.get("gu_id")
         nachname = s.get("nachname")
@@ -169,13 +168,16 @@ with open("schueler_export.csv", mode="w", newline="", encoding="utf-8") as csvf
         klasse = klassenKuerzel.get(s.get("idKlasse")) 
         #Kurse ermitteln
         lernabschnittsdaten = gibLernabschnittsdaten(s.get('id'), abschnitts_id)
-        liste_kurse = gibKursKuerzelListe(lernabschnittsdaten, kursKuerzel, faecherKuerzel)
-        # Vor jedes Kürzel die Klasse setzen
-        liste_kurse_mit_klasse = [f"{klasse}-{k}" for k in liste_kurse]
+        if lernabschnittsdaten.get("leistungsdaten",[]) != []:
+            count += 1
+        
+            liste_kurse = gibKursKuerzelListe(lernabschnittsdaten, kursKuerzel, faecherKuerzel)
+            # Vor jedes Kürzel die Klasse setzen
+            liste_kurse_mit_klasse = [f"{klasse}-{k}" for k in liste_kurse]
 
-        kurse = "|".join(liste_kurse_mit_klasse)
-        print(nachname,kurse)
+            kurse = "|".join(liste_kurse_mit_klasse)
+            print(nachname,kurse,lernabschnittsdaten.get("leistungsdaten",[]),"\n\n")
 
-        writer.writerow([gu_id, nachname, vorname, klasse, kurse])
+            writer.writerow([gu_id, nachname, vorname, klasse, kurse])
 
 print("✅ CSV-Datei 'schueler_export.csv' wurde erstellt.")
