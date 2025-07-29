@@ -70,59 +70,64 @@ else:
     print("⚠️ Kein passender Schuljahresabschnitt gefunden!")
     sys.exit(0)
 
-#schuelerDesAbschnitts = sv.gibSchuelerListe(abschnitts_id)
-schuelerDesAbschnitts = sv.gibSchuelerZuAbschnitt(abschnitts_id).get("schueler")
+# --- Schülerliste über Lernplattform-Export holen ---
+lerngruppen_export = sv.gibLerngruppen(abschnitts_id, 1)
+schuelerDesAbschnitts = lerngruppen_export.get("schueler", [])
 
+printDictEintraege(zaehleEintraegePfad(lerngruppen_export,["lerngruppen","kursartKuerzel"]), anz=100)
 
 printSchuelerinnen(schuelerDesAbschnitts)
 
-kursKuerzel = mapIdZuKuerzel(sv.gibKurse())
 
-print("-----\n Kurs-Kuerzel")
-printDictEintraege(kursKuerzel)
-print("-----")
+klassenKuerzel = mapIdZuKuerzel(lerngruppen_export.get("klassen",[]))
 
-faecherKuerzel = mapIdZuKuerzel(sv.gibFaecher())
+# --- Lerngruppen extrahieren ---
+lerngruppen = lerngruppen_export.get("lerngruppen", [])
 
-print("-----\n Faecher-Kuerzel")
-printDictEintraege(faecherKuerzel)
-print("-----")
+# --- Mapping Schüler-ID → Liste Kurskürzel erstellen ---
+from collections import defaultdict
 
-klassenKuerzel = mapIdZuKuerzel(sv.gibKlassen(abschnitts_id))
-print("-----\n Klassen-Kuerzel")
-printDictEintraege(klassenKuerzel)
-print("-----")
+schueler_zu_kursen = defaultdict(list)
 
-
-# --- Schüler-Daten speichern ---
-
-schueler_liste = schuelerDesAbschnitts
+for gruppe in lerngruppen:
+    kursart = gruppe.get("kursartKuerzel")
+    schueler_liste = gruppe.get("schueler", [])
+    for s in schueler_liste:
+        if kursart:
+            schueler_zu_kursen[s["id"]].append(kursart)
 
 # --- CSV-Datei vorbereiten ---
+# --- Mapping: Lerngruppe-ID → Lerngruppe-Objekt ---
+lerngruppen_liste = lerngruppen_export.get("lerngruppen", [])
+lerngruppe_map = {lg["id"]: lg for lg in lerngruppen_liste if lg.get("id")}
+
 with open("schueler_export.csv", mode="w", newline="", encoding="utf-8") as csvfile:
     writer = csv.writer(csvfile, delimiter=";")
     writer.writerow(["GU_ID", "Nachname", "Vorname", "Klasse", "Kurse"])  # Kopfzeile
 
     count = 0
-    for s in schueler_liste:
-        if (count>300): break
+    for s in schuelerDesAbschnitts:
+        if count > 300:
+            break
 
         gu_id = s.get("gu_id")
         nachname = s.get("nachname")
         vorname = s.get("vorname")
-        klasse = klassenKuerzel.get(s.get("idKlasse")) 
-        #Kurse ermitteln
-        lernabschnittsdaten = sv.gibLernabschnittsdaten(s.get('id'), abschnitts_id)
-        if lernabschnittsdaten.get("leistungsdaten",[]) != []:
+        klasse = klassenKuerzel.get(s.get("idKlasse"))
+        ids_lerngruppen = s.get("idsLerngruppen", [])
+
+        if ids_lerngruppen:
             count += 1
-        
-            liste_kurse = sv.gibKursKuerzelListe(lernabschnittsdaten, kursKuerzel, faecherKuerzel)
-            # Vor jedes Kürzel die Klasse setzen
-            liste_kurse_mit_klasse = [f"{klasse}-{k}" for k in liste_kurse]
+            kuerzel_liste = [
+                f"{klasse}-{lerngruppe_map[lg_id]['bezeichnung']}"
+                for lg_id in ids_lerngruppen
+                if lg_id in lerngruppe_map
+                and lerngruppe_map[lg_id].get("bezeichnung")
+                and klasse
+            ]
+            kurse = "|".join(kuerzel_liste)
 
-            kurse = "|".join(liste_kurse_mit_klasse)
-            print(nachname,kurse,lernabschnittsdaten.get("leistungsdaten",[]),"\n\n")
-
+            print(nachname, kurse, "\n")
             writer.writerow([gu_id, nachname, vorname, klasse, kurse])
 
 print("✅ CSV-Datei 'schueler_export.csv' wurde erstellt.")
