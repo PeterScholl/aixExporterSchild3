@@ -2,16 +2,20 @@
 import csv
 import sys
 from collections import Counter
+from config_gui import load_config, show_config_gui
 import svwsapi as sv
 
+cfg = load_config()
 # --- Konfigurierbare Variablen ---
-schema = "svwsdb"
+schema = cfg.get("schema","svwsdb")
 #base_url = f"https://nightly.svws-nrw.de/db/{schema}"
-base_url = f"https://localhost/db/{schema}"
-username = "admin"  # Beispiel: Benutzername (ggf. anpassen)
-password = "Einstein"   # Beispiel: Passwort (ggf. anpassen)
-jahr = 2025
-abschnitt = 1
+base_url = f'https://{cfg.get("host","localhost")}/db/{schema}'
+username = cfg.get("username","admin")  # Beispiel: Benutzername (ggf. anpassen)
+password = cfg.get("password","pass")   # Beispiel: Passwort (ggf. anpassen)
+jahr = cfg.get("jahr",2025)
+abschnitt = cfg.get("abschnitt",1)
+# Liste von Kursarten, bei denen keine Klasse vorangestellt wird
+kursarten_ohne_klasse = cfg.get("kursarten_ohne_klasse",["AGGT"])
 
 # --- Authentifizierung ---
 auth = (username, password)
