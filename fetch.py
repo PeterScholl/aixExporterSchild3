@@ -97,6 +97,10 @@ for gruppe in lerngruppen:
             schueler_zu_kursen[s["id"]].append(kursart)
 
 # --- CSV-Datei vorbereiten ---
+
+# Liste von Kursarten, bei denen keine Klasse vorangestellt wird
+kursarten_ohne_klasse = ["AGGT"]
+
 # --- Mapping: Lerngruppe-ID → Lerngruppe-Objekt ---
 lerngruppen_liste = lerngruppen_export.get("lerngruppen", [])
 lerngruppe_map = {lg["id"]: lg for lg in lerngruppen_liste if lg.get("id")}
@@ -107,10 +111,10 @@ with open("schueler_export.csv", mode="w", newline="", encoding="utf-8") as csvf
 
     count = 0
     for s in schuelerDesAbschnitts:
-        if count > 300:
+        if count > 3000:
             break
 
-        gu_id = s.get("gu_id")
+        gu_id = s.get("id")
         nachname = s.get("nachname")
         vorname = s.get("vorname")
         klasse = klassenKuerzel.get(s.get("idKlasse"))
@@ -118,16 +122,26 @@ with open("schueler_export.csv", mode="w", newline="", encoding="utf-8") as csvf
 
         if ids_lerngruppen:
             count += 1
-            kuerzel_liste = [
-                f"{klasse}-{lerngruppe_map[lg_id]['bezeichnung']}"
-                for lg_id in ids_lerngruppen
-                if lg_id in lerngruppe_map
-                and lerngruppe_map[lg_id].get("bezeichnung")
-                and klasse
-            ]
+            kuerzel_liste = []
+            for lg_id in ids_lerngruppen:
+                lg = lerngruppe_map.get(lg_id)
+                if not lg:
+                    continue
+                bezeichnung = lg.get("bezeichnung")
+                kursart = lg.get("kursartKuerzel")
+
+                if bezeichnung and klasse:
+                    # Prüfen ob es sich um eine Lerngruppe handelt, die im Klassenverband oder Jahrgangsstufe unterrichtet wird.
+                    if kursart in kursarten_ohne_klasse: #Jahrgangsübergreifend
+                        kuerzel_liste.append(bezeichnung)
+                    else: #Klassenverband
+                        kuerzel_liste.append(f"{klasse}-{bezeichnung}")
+
             kurse = "|".join(kuerzel_liste)
 
-            print(nachname, kurse, "\n")
+            #print(nachname, kurse, "\n")
             writer.writerow([gu_id, nachname, vorname, klasse, kurse])
+        else:
+            print(f"⚠️  {nachname}, {vorname} ({klasse}) hat keine Lerngruppe")
 
 print("✅ CSV-Datei 'schueler_export.csv' wurde erstellt.")
