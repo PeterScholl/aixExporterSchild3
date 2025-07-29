@@ -1,5 +1,8 @@
 import requests
 import os
+import io
+import gzip
+import json
 
 base_url = ""
 auth = ()
@@ -36,6 +39,30 @@ def gibSchuelerListe(abschnitts_id: int) -> list:
     response = requests.get(url, auth=auth, verify=verify)
     response.raise_for_status()
     return response.json()
+
+def gibSchuelerZuAbschnitt(abschnitt_id: int) -> list:
+    """Holt die Schüler-Auswahlliste als gzip-komprimierte JSON und gibt sie als Liste zurück"""
+    url = f"{base_url}/schueler/abschnitt/{abschnitt_id}/auswahlliste"
+    headers = {"accept": "application/octet-stream"}
+    response = requests.get(url, auth=auth, headers=headers, verify=verify)
+
+    if response.status_code == 403:
+        print("⚠️ Zugriff verweigert: Der Benutzer hat keine Rechte, um Schülerdaten anzusehen.")
+        return []
+
+    if response.status_code == 404:
+        print("⚠️ Nicht alle Daten gefunden (404).")
+        return []
+
+    response.raise_for_status()
+
+    # Gzip-Daten aus dem Response lesen
+    compressed_data = io.BytesIO(response.content)
+    with gzip.GzipFile(fileobj=compressed_data) as f:
+        data = f.read()
+
+    return json.loads(data)
+
 
 def gibLernabschnittsdaten(schueler_id: int, abschnitt_id: int) -> dict:
     """Holt die Lernabschnittsdaten eines Schülers für einen bestimmten Abschnitt"""
@@ -85,6 +112,23 @@ def gibKurse() -> list:
     response.raise_for_status()
     return response.json()
 
+def gibKurseDesAbschnitts(abschnitt_id: int) -> list:
+    """Holt alle Kurse eines Schuljahresabschnitts, gibt Liste zurück"""
+    url = f"{base_url}/kurse/abschnitt/{abschnitt_id}"
+    response = requests.get(url, auth=auth, verify=verify)
+
+    if response.status_code == 403:
+        print("⚠️ Zugriff verweigert: Der Benutzer hat keine Rechte, um Kursdaten anzusehen.")
+        return []
+
+    if response.status_code == 404:
+        print("⚠️ Keine Kurs-Einträge gefunden (404).")
+        return []
+
+    response.raise_for_status()
+    return response.json()
+
+
 def gibFaecher() -> list:
     """Holt die Liste aller Kurse"""
     url = f"{base_url}/faecher"
@@ -98,3 +142,42 @@ def gibKlassen(abschnitt_id: int) -> list:
     response = requests.get(url, auth=auth, verify=verify)
     response.raise_for_status()
     return response.json()
+
+def gibLerngruppen(abschnitt_id: int, lernplattform_id: int) -> dict:
+    """Holt den Datenexport für eine Lernplattform im angegebenen Abschnitt"""
+    url = f"{base_url}/v1/lernplattformen/{lernplattform_id}/{abschnitt_id}"
+    response = requests.get(url, auth=auth, verify=verify)
+
+    if response.status_code == 403:
+        print("⚠️ Zugriff verweigert: Keine Rechte für Lernplattform-Export.")
+        return {}
+
+    if response.status_code == 404:
+        print("⚠️ Fehlende Daten für Lernplattform-Export (404).")
+        return {}
+
+    response.raise_for_status()
+    return response.json()
+
+
+if __name__ == "__main__":
+    schema = "svwsdb"
+    #base_url = f"https://nightly.svws-nrw.de/db/{schema}"
+    base_url = f"https://localhost/db/{schema}"
+    username = "admin"  # Beispiel: Benutzername (ggf. anpassen)
+    password = "Einstein"   # Beispiel: Passwort (ggf. anpassen)
+    jahr = 2025
+    abschnitt = 1
+
+    auth=(username,password)
+
+    # Basisinformationen prüfen
+    abschnitts_id = gibIdSchuljahresabschnitt(jahr, abschnitt)
+
+    if abschnitts_id:
+        print(f"✅ Gefundene ID des Schuljahresabschnitts ({jahr}.{abschnitt}): {abschnitts_id}")
+    else:
+        print("⚠️ Kein passender Schuljahresabschnitt gefunden!")
+
+    #print(gibLernabschnittsdaten(4058,1).get("leistungsdaten"))
+    print(len(gibKurseDesAbschnitts(abschnitts_id)))

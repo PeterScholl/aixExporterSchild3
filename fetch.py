@@ -1,6 +1,7 @@
 
 import csv
 import sys
+from collections import Counter
 import svwsapi as sv
 
 # --- Konfigurierbare Variablen ---
@@ -9,7 +10,7 @@ schema = "svwsdb"
 base_url = f"https://localhost/db/{schema}"
 username = "admin"  # Beispiel: Benutzername (ggf. anpassen)
 password = "Einstein"   # Beispiel: Passwort (ggf. anpassen)
-jahr = 2018
+jahr = 2025
 abschnitt = 1
 
 # --- Authentifizierung ---
@@ -38,6 +39,27 @@ def mapIdZuKuerzel(kf_liste: list) -> dict:
     """Erstellt ein Mapping: Kurs-ID → Kürzel"""
     return {kurs["id"]: kurs["kuerzel"] for kurs in kf_liste if kurs.get("id") and kurs.get("kuerzel")}
 
+def zaehleEintraegePfad(data: dict, schluessel_pfad: list) -> dict:
+    """
+    Zählt die Werte am Ende eines verschachtelten Schlüsselpfa des JSON-Dokuments.
+    Beispiel: ["lerngruppen", "kursartKuerzel"]
+    """
+    eintraege = []
+
+    def durchlaufen(obj, pfad):
+        if not pfad:
+            eintraege.append(obj)
+        elif isinstance(obj, list):
+            for item in obj:
+                durchlaufen(item, pfad)
+        elif isinstance(obj, dict):
+            schluessel = pfad[0]
+            if schluessel in obj:
+                durchlaufen(obj[schluessel], pfad[1:])
+
+    durchlaufen(data, schluessel_pfad)
+    return dict(Counter(eintraege))
+
 
 # Basisinformationen prüfen
 abschnitts_id = sv.gibIdSchuljahresabschnitt(jahr, abschnitt)
@@ -48,7 +70,9 @@ else:
     print("⚠️ Kein passender Schuljahresabschnitt gefunden!")
     sys.exit(0)
 
-schuelerDesAbschnitts = sv.gibSchuelerListe(abschnitts_id)
+#schuelerDesAbschnitts = sv.gibSchuelerListe(abschnitts_id)
+schuelerDesAbschnitts = sv.gibSchuelerZuAbschnitt(abschnitts_id).get("schueler")
+
 
 printSchuelerinnen(schuelerDesAbschnitts)
 
@@ -81,7 +105,7 @@ with open("schueler_export.csv", mode="w", newline="", encoding="utf-8") as csvf
 
     count = 0
     for s in schueler_liste:
-        if (count>10): break
+        if (count>300): break
 
         gu_id = s.get("gu_id")
         nachname = s.get("nachname")
