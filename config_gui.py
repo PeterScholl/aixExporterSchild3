@@ -29,7 +29,9 @@ def save_config(cfg: dict, path: str = CONFIG_PATH):
         json.dump(cfg, f, ensure_ascii=False, indent=2)
 
 def show_config_gui(initial: dict | None = None) -> dict:
-    cfg = load_config() if initial is None else initial.copy()
+    if initial is None:
+        return
+    cfg = initial.copy()
 
     root = tk.Tk()
     root.title("SVWS – Konfiguration")
@@ -75,8 +77,6 @@ def show_config_gui(initial: dict | None = None) -> dict:
             })
             # base_url aus host+schema ableiten (auch in cfg ablegen, wenn du magst)
             cfg["base_url"] = f"https://{cfg['host']}/db/{cfg['schema']}"
-            save_config(cfg)
-            messagebox.showinfo("Gespeichert", f"Konfiguration gespeichert nach {CONFIG_PATH}")
             root.destroy()
         except Exception as e:
             messagebox.showerror("Fehler", str(e))
@@ -92,5 +92,8 @@ def show_config_gui(initial: dict | None = None) -> dict:
 
 # Beispielverwendung
 if __name__ == "__main__":
-    cfg = show_config_gui()
+    cfg = show_config_gui(load_config())
+    save_config(cfg)
+    messagebox.showinfo("Gespeichert", f"Konfiguration gespeichert nach {CONFIG_PATH}")
+            
     print("Geladene Konfig:", json.dumps(cfg, ensure_ascii=False, indent=2))
