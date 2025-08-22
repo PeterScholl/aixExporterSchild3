@@ -111,6 +111,8 @@ class ReportApp(tk.Tk):
                 self.report_text.insert(tk.END,f"Es gibt folgende kursartKuerzel: {res}\n")
                 res = collect_values(getattr(self.generator,"schueler",[]),"status")
                 self.report_text.insert(tk.END,f"Es gibt folgende Status-Werte bei den SuS: {res}\n")
+                lg_pro_jahrgang = count_lerngruppen_pro_jahrgang(getattr(self.generator, "lerngruppen", []))
+                self.report_text.insert(tk.END,f"Es gibt folgende Anzahl Lerngruppen in jedem Jahrgang:\n{lg_pro_jahrgang}\n")
             case "ReferenzIDs aus SuS-Ids":
                 count = 0
                 for schueler in getattr(self.generator, "schueler", {}):
@@ -297,6 +299,16 @@ def collect_values(objs, key, unique=True):
     else: 
         return [obj.get(key) for obj in objs if key in obj]
 
+def count_lerngruppen_pro_jahrgang(lerngruppen):
+    counts = {}
+
+    for lg in lerngruppen:
+        jg = lg.get("jahrgang")
+        if not jg:        # None oder fehlt
+            jg = "ohne"
+        counts[jg] = counts.get(jg, 0) + 1 #Wenn nicht vorhanden auf 0 setzen
+
+    return counts
 
 # Anwendung starten
 if __name__ == "__main__":

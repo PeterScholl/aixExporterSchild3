@@ -90,6 +90,8 @@ class Generator():
         return count
     
     def addTeamBezZuLerngruppen(self):
+        """Jeder Lerngruppe wird aufgrund der zugeordneten Schülermenge eine Bezeichnug mit Klasse, Jahrgang oder ohne
+        prefix zugeordnet. Zudem erhält die Lerngruppe auf einen Jahrgang"""
         resultText = "" #Ergebnistext
         count=0 #Zähler für das Ergebnis
         countlg=0 # Zähler insgesamt
@@ -108,18 +110,22 @@ class Generator():
                     if kursartKuerzel in getattr(self, "kursarten_ohne_klasse", []):
                         count += 1
                         lg["teamBez"] = lgbezeichnung
+                        lg["jahrgang"] = None
                     else: # Jetzt muss entweder Jahrgang oder Klasse vorangestellt werden
                         idsSchueler = lg.get("idsSchueler", [])
                         if (len(idsSchueler) > 0):
                             if kursartKuerzel in getattr(self, "kursart_nur_mit_jahrgang", []):
                                 #Jahrgang eines Schuelers holen
                                 prefix = self.get_jahrgang_von_schueler(idsSchueler[0])
+                                jahrgang = prefix
                             else:
                                 #Klasse eines Schuelers holen
                                 prefix = self.get_klasse_von_schueler(idsSchueler[0])
+                                jahrgang = self.get_jahrgang_von_schueler(idsSchueler[0])
                             if prefix:
                                 count+=1
                                 lg["teamBez"] = prefix+" - "+lgbezeichnung
+                                lg["jahrgang"] = jahrgang
                             else:
                                 resultText+=f'FEHLER: Klasse oder Jahrgang zu {lg} kann nicht gefunden werden\n'
                         else:
