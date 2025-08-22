@@ -180,7 +180,8 @@ class Generator():
             return "Nicht alle Lerngruppen haben eine Teams-Bezeichnung (key: teamBez)\n"
         with open(filename, mode="w", newline="", encoding="utf-8") as csvfile:
             writer = csv.writer(csvfile, delimiter=";")
-            writer.writerow(["ReferenzID", "Nachname", "Vorname", "Klasse", "Kurse"])  # Kopfzeile
+            # Original Kopfzeile: ReferenzId;Vorname;Nachname;Klasse;Gruppen
+            writer.writerow(["ReferenzId", "Vorname", "Nachname", "Klasse", "Gruppen"])  # Kopfzeile
 
             count = 0
             lookup_lg = self.lookupDict.get("lerngruppen",{})
@@ -212,7 +213,7 @@ class Generator():
 
                 kurse = "|".join(teams_liste)
                 count += 1
-                writer.writerow([referenzId, nachname, vorname, klasse, kurse])
+                writer.writerow([referenzId, vorname, nachname, klasse, kurse])
 
         ergText+=(f"✅ CSV-Datei '{filename}' wurde mit {count} Einträgen erstellt.\n")
         return ergText
