@@ -9,7 +9,8 @@ DEFAULTS = {
     "password": "pass",
     "jahr": 2025,
     "abschnitt": 1,
-    "kursarten_ohne_klasse": ["AGGT"]
+    "kursarten_ohne_klasse": ["AGGT"],
+    "kursarten_nur_mit_jahrgang": ["GK","LK"]
 }
 
 CONFIG_PATH = "config.json"
@@ -28,7 +29,77 @@ def save_config(cfg: dict, path: str = CONFIG_PATH):
     with open(path, "w", encoding="utf-8") as f:
         json.dump(cfg, f, ensure_ascii=False, indent=2)
 
-def show_config_gui(initial: dict | None = None) -> dict:
+def show_config_gui(master, initial: dict | None = None) -> dict | None:
+    if not initial:
+        return None
+    cfg = initial.copy()
+
+    win = tk.Toplevel(master)
+    win.title("SVWS – Konfiguration")
+    win.transient(master)
+    win.grab_set()                 # modal
+    win.columnconfigure(1, weight=1)
+
+    def add_row(r, lbl, widget):
+        ttk.Label(win, text=lbl).grid(row=r, column=0, sticky="w", padx=8, pady=6)
+        widget.grid(row=r, column=1, sticky="ew", padx=8, pady=6)
+
+    e_schema = ttk.Entry(win); e_schema.insert(0, cfg["schema"])
+    e_host   = ttk.Entry(win); e_host.insert(0, cfg["host"])
+    e_user   = ttk.Entry(win); e_user.insert(0, cfg["username"])
+    e_pass   = ttk.Entry(win, show="*"); e_pass.insert(0, cfg["password"])
+    s_jahr = ttk.Spinbox(win, from_=2000, to=2100, width=8); s_jahr.set(cfg["jahr"])
+    s_abs  = ttk.Spinbox(win, values=(1,2), width=8); s_abs.set(cfg["abschnitt"])
+
+    e_kurse = ttk.Entry(win);    e_kurse.insert(0, ",".join(cfg.get("kursarten_ohne_klasse", [])))
+    e_jgkurse = ttk.Entry(win);  e_jgkurse.insert(0, ",".join(cfg.get("kursarten_nur_mit_jahrgang", [])))
+
+    add_row(0, "Schema", e_schema)
+    add_row(1, "Host (ohne /db/...)", e_host)
+    add_row(2, "Username", e_user)
+    add_row(3, "Passwort", e_pass)
+    add_row(4, "Jahr", s_jahr)
+    add_row(5, "Abschnitt", s_abs)
+    add_row(6, "Kursarten ohne Klasse (kommagetrennt)", e_kurse)
+    add_row(7, "Kursarten nur mit Jahrgang (kommagetrennt)", e_jgkurse)
+
+    btns = ttk.Frame(win); btns.grid(row=8, column=0, columnspan=2, sticky="e", padx=8, pady=8)
+
+    result = {"value": None}  # wird auf cfg gesetzt, wenn gespeichert
+
+    def on_save_close():
+        try:
+            kursarten  = [x.strip() for x in e_kurse.get().split(",") if x.strip()]
+            jgkursarten = [x.strip() for x in e_jgkurse.get().split(",") if x.strip()]
+            cfg.update({
+                "schema": e_schema.get().strip(),
+                "host": e_host.get().strip(),
+                "username": e_user.get().strip(),
+                "password": e_pass.get(),
+                "jahr": int(s_jahr.get()),
+                "abschnitt": int(s_abs.get()),
+                "kursarten_ohne_klasse": kursarten,
+                "kursarten_nur_mit_jahrgang": jgkursarten
+            })
+            cfg["base_url"] = f"https://{cfg['host']}/db/{cfg['schema']}"
+            result["value"] = cfg
+            win.destroy()
+        except Exception as e:
+            messagebox.showerror("Fehler", str(e), parent=win)
+
+    def on_cancel():
+        result["value"] = None
+        win.destroy()
+
+    win.protocol("WM_DELETE_WINDOW", on_cancel)
+
+    ttk.Button(btns, text="Abbrechen", command=on_cancel).pack(side="right", padx=6)
+    ttk.Button(btns, text="Speichern & Schließen", command=on_save_close).pack(side="right")
+
+    win.wait_window()  # blockiert nur bis Dialog geschlossen ist
+    return result["value"]
+
+def show_config_gui_alt(initial: dict | None = None) -> dict:
     if initial is None:
         return
     cfg = initial.copy()
@@ -54,6 +125,10 @@ def show_config_gui(initial: dict | None = None) -> dict:
     e_kurse = ttk.Entry(root)
     e_kurse.insert(0, ",".join(cfg.get("kursarten_ohne_klasse", [])))
 
+    e_jgkurse = ttk.Entry(root)
+    e_jgkurse.insert(0, ",".join(cfg.get("kursarten_nur_mit_jahrgang", [])))
+
+
     add_row(0, "Schema", e_schema)
     add_row(1, "Host (ohne /db/...)", e_host)
     add_row(2, "Username", e_user)
@@ -61,11 +136,14 @@ def show_config_gui(initial: dict | None = None) -> dict:
     add_row(4, "Jahr", s_jahr)
     add_row(5, "Abschnitt", s_abs)
     add_row(6, "Kursarten ohne Klasse (kommagetrennt)", e_kurse)
+    add_row(7, "Kursarten nur mit Jahrgang (kommagetrennt)", e_jgkurse)
+    
 
-    btns = ttk.Frame(root); btns.grid(row=7, column=0, columnspan=2, sticky="e", padx=8, pady=8)
+    btns = ttk.Frame(root); btns.grid(row=8, column=0, columnspan=2, sticky="e", padx=8, pady=8)
     def on_save_close():
         try:
             kursarten = [x.strip() for x in e_kurse.get().split(",") if x.strip()]
+            jgkursarten = [x.strip() for x in e_jgkurse.get().split(",") if x.strip()]
             cfg.update({
                 "schema": e_schema.get().strip(),
                 "host": e_host.get().strip(),
@@ -74,6 +152,7 @@ def show_config_gui(initial: dict | None = None) -> dict:
                 "jahr": int(s_jahr.get()),
                 "abschnitt": int(s_abs.get()),
                 "kursarten_ohne_klasse": kursarten,
+                "kursarten_nur_mit_jahrgang": jgkursarten
             })
             # base_url aus host+schema ableiten (auch in cfg ablegen, wenn du magst)
             cfg["base_url"] = f"https://{cfg['host']}/db/{cfg['schema']}"
@@ -92,7 +171,7 @@ def show_config_gui(initial: dict | None = None) -> dict:
 
 # Beispielverwendung
 if __name__ == "__main__":
-    cfg = show_config_gui(load_config())
+    cfg = show_config_gui(tk.Tk(), load_config())
     save_config(cfg)
     messagebox.showinfo("Gespeichert", f"Konfiguration gespeichert nach {CONFIG_PATH}")
             

@@ -31,7 +31,7 @@ class Generator():
             print("⚠️ Kein passender Schuljahresabschnitt gefunden!")
             return False
         
-    def configValues(self):
+    def configValues(self, root):
         cfg = {}
         cfg["schema"] = self.schema if self.schema else "svwsdb"
         cfg["host"]= self.host if self.host else "localhost"
@@ -40,9 +40,15 @@ class Generator():
         cfg["jahr"] = self.jahr if self.jahr else 2025
         cfg["abschnitt"] = self.abschnitt if self.abschnitt else 1
         cfg["kursarten_ohne_klasse"] = self.kursarten_ohne_klasse if self.kursarten_ohne_klasse else ["AGGT"]
+        cfg["kursarten_nur_mit_jahrgang"] = getattr(self,"kursarten_nur_mit_jahrgang", [])
 
-        result = show_config_gui(cfg)
+        print("show config - start")
+
+        result = show_config_gui(root, cfg)
+        print("show config - end")
+        print(f"Result: {result}")
         for key, value in result.items():
+            print(f"Key {key} erhält Value: {value}")
             setattr(self, key, value)
         sv.setConfig(self.base_url, (self.username, self.password))
 

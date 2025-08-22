@@ -83,7 +83,7 @@ class ReportApp(tk.Tk):
         print(f"Button '{text}' clicked")
         match text:
             case "Verbindungseinstellung":
-                self.generator.configValues()
+                self.generator.configValues(self)
                 self.report_text.insert(tk.END, "Konfiguration durchgeführt - Menu speichern?\n")
             case "Abschnitts-ID holen":
                 self.generator.initAbschnittsID()
