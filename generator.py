@@ -86,10 +86,146 @@ class Generator():
                         count+=1
 
         return count
+    
+    def addTeamBezZuLerngruppen(self):
+        resultText = "" #Ergebnistext
+        count=0 #Zähler für das Ergebnis
+        countlg=0 # Zähler insgesamt
+
+        lookupSuS = self.lookupDict.get("schueler",{})
+        if len(lookupSuS) == 0:
+            return "FEHLER: Schueler-Lookup-Dict ist leer\n"
+
+        # alle Lerngruppen durchgehen
+        for lg in getattr(self, "lerngruppen", []):
+            countlg+=1
+            kursartKuerzel = lg.get("kursartKuerzel", None)
+            lgbezeichnung = lg.get("bezeichnung", None)
+            if "kursartKuerzel" in lg:
+                if lgbezeichnung != None:
+                    if kursartKuerzel in getattr(self, "kursarten_ohne_klasse", []):
+                        count += 1
+                        lg["teamBez"] = lgbezeichnung
+                    else: # Jetzt muss entweder Jahrgang oder Klasse vorangestellt werden
+                        idsSchueler = lg.get("idsSchueler", [])
+                        if (len(idsSchueler) > 0):
+                            if kursartKuerzel in getattr(self, "kursart_nur_mit_jahrgang", []):
+                                #Jahrgang eines Schuelers holen
+                                prefix = self.get_jahrgang_von_schueler(idsSchueler[0])
+                            else:
+                                #Klasse eines Schuelers holen
+                                prefix = self.get_klasse_von_schueler(idsSchueler[0])
+                            if prefix:
+                                count+=1
+                                lg["teamBez"] = prefix+" - "+lgbezeichnung
+                            else:
+                                resultText+=f'FEHLER: Klasse oder Jahrgang zu {lg} kann nicht gefunden werden\n'
+                        else:
+                            resultText+=f'FEHLER: Lerngruppe {lg} hat keine Schüler\n'
+                        
+                else: #Diese Lerngruppe hat keine Bezeichnung
+                    resultText+= f'Keine Bezeichnung bei {lg.get("id",lg)}\n'
+            else: #kursartkuerzel gibt es nicht
+                resultText+= f'Kein Kursartkuerzel bei {lg.get("id",lg)} - Wert {kursartKuerzel}\n'
+
+        resultText+=f'Es wurden {count} Teambezeichnungen bei insgesamt {countlg} Lerngruppen zugeordnet\n'
+        return resultText
+    
+    def get_klasse_von_schueler(self, schueler_id: int) -> str | None:
+        # Schüler nachschlagen
+        schueler = self.lookupDict.get("schueler", {}).get(schueler_id)
+        if not schueler:
+            return None
+
+        # Klassen-ID aus Schüler holen
+        klassen_id = schueler.get("idKlasse")
+        if not klassen_id:
+            return None
+
+        # Klasse nachschlagen
+        klasse = self.lookupDict.get("klassen", {}).get(klassen_id)
+        if not klasse:
+            return None
+
+        # Kürzel zurückgeben, falls vorhanden
+        return klasse.get("kuerzelAnzeige")
+
+    def get_jahrgang_von_schueler(self, schueler_id: int) -> str | None:
+        # Schüler nachschlagen
+        schueler = self.lookupDict.get("schueler", {}).get(schueler_id)
+        if not schueler:
+            return None
+
+        # jahrgang-ID aus Schüler holen
+        jahrgang_id = schueler.get("idJahrgang")
+        if not jahrgang_id:
+            return None
+
+        # Klasse nachschlagen
+        jahrgang = self.lookupDict.get("jahrgaenge", {}).get(jahrgang_id)
+        if not jahrgang:
+            return None
+
+        # Kürzel zurückgeben, falls vorhanden
+        return jahrgang.get("kuerzelAnzeige")
+    
+    def writeSuSCSV(self, statusList = [2], filename="Student.csv"): # Status 2 - aktiv, 6 - extern
+        ergText = ""
+        # Voraussetzungen prüfen (ReferenzID vorhanden, TeamsBez in den Lerngruppen)
+        if not all("referenzId" in schueler for schueler in getattr(self,"schueler",{})):
+            return "Keine Schüler vorhanden oder nicht alle haben eine referenzId\n"
+        if not all("teamBez" in lerngruppe for lerngruppe in getattr(self,"lerngruppen",{})):
+            return "Nicht alle Lerngruppen haben eine Teams-Bezeichnung (key: teamBez)\n"
+        with open(filename, mode="w", newline="", encoding="utf-8") as csvfile:
+            writer = csv.writer(csvfile, delimiter=";")
+            writer.writerow(["ReferenzID", "Nachname", "Vorname", "Klasse", "Kurse"])  # Kopfzeile
+
+            count = 0
+            lookup_lg = self.lookupDict.get("lerngruppen",{})
+            for s in getattr(self,"schueler",{}):
+                if not s.get("status") in statusList:
+                    continue
+                if count > 3000:
+                    ergText+= f"Limiterreicht - Maximale Anzahl {count}\n"
+                    break
+
+                referenzId = s.get("referenzId")
+                nachname = s.get("nachname")
+                vorname = s.get("vorname")
+                klasse = self.get_klasse_von_schueler(s.get("id"))
+                ids_lerngruppen = s.get("idsLerngruppen", [])
+
+                teams_liste = []
+
+                if ids_lerngruppen:
+                    for lg_id in ids_lerngruppen:
+                        lg = lookup_lg.get(lg_id,{})
+                        if not lg:
+                            ergText+=f"Lerngruppe mit {lg_id} nicht gefunden\n"
+                            continue
+                        bezeichnung = lg.get("teamBez")
+                        teams_liste.append(bezeichnung)
+                else:
+                    ergText+=f"⚠️  {nachname}, {vorname} ({klasse}) hat keine Lerngruppe\n"
+
+                kurse = "|".join(teams_liste)
+                count += 1
+                writer.writerow([referenzId, nachname, vorname, klasse, kurse])
+
+        ergText+=(f"✅ CSV-Datei '{filename}' wurde mit {count} Einträgen erstellt.\n")
+        return ergText
+
+    def writeExternalCSV(self):
+        # Status = 6 (gibt es auch Gastschüler?!)
+        pass
+
+    def writeLuLCSV(self):
+        pass
+
 
 
 
 if __name__=="__main__":
     g = Generator()
-    g.configValues()
+    
 

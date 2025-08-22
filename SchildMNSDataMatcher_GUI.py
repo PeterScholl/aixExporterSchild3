@@ -67,8 +67,9 @@ class ReportApp(tk.Tk):
         # 10 Buttons im Grid
         button_texts = [
             "Verbindungseinstellung", "Abschnitts-ID holen", "Report", "Lerngruppen holen",
-            "Statistik anzeigen", "gerateLookupDicts", "idsSchulerZuLerngruppen", "b8",
-            "b9", "b10","b11","TempHilfsfunktion"
+            "Statistik anzeigen", "gerateLookupDicts", "idsSchulerZuLerngruppen", "TeamBezErstellen",
+            "b9", "b10","b11","TempHilfsfunktion",
+            "schueler_csv", "sus_extern_csv", "lehrer_csv", "SuS-ID->ReferenzID"
         ]
         
         # Buttons in einem <x> times 4 Grid
@@ -105,9 +106,28 @@ class ReportApp(tk.Tk):
             case "idsSchulerZuLerngruppen":
                 anz = self.generator.addSuSIdsZuLerngruppen()
                 self.report_text.insert(tk.END,f"Es wurden {anz} Verknüpfungen erstellt\n")
+            case "TeamBezErstellen":
+                self.report_text.insert(tk.END, self.generator.addTeamBezZuLerngruppen())
             case "TempHilfsfunktion":
                 res = collect_values(getattr(self.generator,"lerngruppen",[]),"kursartKuerzel")
                 self.report_text.insert(tk.END,f"Es gibt folgende kursartKuerzel: {res}\n")
+                res = collect_values(getattr(self.generator,"schueler",[]),"status")
+                self.report_text.insert(tk.END,f"Es gibt folgende Status-Werte bei den SuS: {res}\n")
+            case "SuS-ID->ReferenzID":
+                count = 0
+                for schueler in getattr(self.generator, "schueler", {}):
+                    if "id" in schueler:
+                        count+=1
+                        schueler["referenzId"]=schueler.get("id")
+                self.report_text.insert(tk.END,f'Bei {count} von {len(getattr(self.generator, "schueler", {}))} Schülern die ReferenzId-gesetzt\n')
+            case "schueler_csv":
+                self.report_text.insert(tk.END, self.generator.writeSuSCSV())
+            case "sus_extern_csv":
+                self.report_text.insert(tk.END, "Externe Schüler mit Status 6:\n")
+                self.report_text.insert(tk.END, self.generator.writeSuSCSV(statusList=[6], filename="StudentExternal.csv"))
+            case "lehrer_csv":
+                self.report_text.insert(tk.END,f"To be done\n")
+                pass
             case _:
                 print("Ubekannter Button")
 
