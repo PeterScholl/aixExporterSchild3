@@ -40,6 +40,14 @@ def gibSchuelerListe(abschnitts_id: int) -> list:
     response.raise_for_status()
     return response.json()
 
+def gibLehrerListe() -> list:
+    """Holt die Lehrerliste über /lehrer/"""
+    url = f"{base_url}/lehrer"
+    response = requests.get(url, auth=auth, verify=verify)
+    response.raise_for_status()
+    return response.json()
+
+
 def gibSchuelerZuAbschnitt(abschnitt_id: int) -> list:
     """Holt die Schüler-Auswahlliste als gzip-komprimierte JSON und gibt sie als Liste zurück"""
     url = f"{base_url}/schueler/abschnitt/{abschnitt_id}/auswahlliste"

@@ -65,11 +65,12 @@ class ReportApp(tk.Tk):
         button_frame = tk.Frame(self)
         button_frame.pack(pady=10)
 
-        # 10 Buttons im Grid
+        # Die Buttons im Grid
         button_texts = [
             "Verbindungseinstellung", "Abschnitts-ID holen", "Lerngruppen holen", "Statistik anzeigen", 
             "generateLookupDicts", "idsSchuelerZuLerngruppen", "TeamBezErstellen", "Referenz-IDs aus File", 
             "ReferenzIDs aus SuS-Ids", "LehrerReferenzen aus File","Jahrgangsteams","TempHilfsfunktion",
+            "idsLerngruppenZuLehrern","idsKlassenleitungenZuLehrern","ErgänzeLehrerAusDB","b16",
             "schueler_csv", "sus_extern_csv", "lehrer_csv", "ClearScreen"
         ]
         
@@ -93,6 +94,8 @@ class ReportApp(tk.Tk):
             case "Lerngruppen holen":
                 self.generator.lerngruppenHolen()
                 self.report_text.insert(tk.END,f"Lerngruppen geholt\n")
+            case "ErgänzeLehrerAusDB":
+                self.report_text.insert(tk.END,self.generator.ergaenzeLehrer())
             case "Statistik anzeigen":
                 self.show_statistik()
             case "generateLookupDicts":
@@ -101,6 +104,12 @@ class ReportApp(tk.Tk):
                 for key, value in self.generator.lookupDict.items():
                     ergtext+=f"Einträge für den key {key}: {len(value)}\n"
                 self.report_text.insert(tk.END,ergtext)
+            case "idsKlassenleitungenZuLehrern":
+                anz = self.generator.addKlassenleitungsIdsZuLuL()
+                self.report_text.insert(tk.END,f"Es wurden {anz} Verknüpfungen erstellt\n")
+            case "idsLerngruppenZuLehrern":
+                anz = self.generator.addLerngruppenIdsZuLuL()
+                self.report_text.insert(tk.END,f"Es wurden {anz} Verknüpfungen erstellt\n")
             case "idsSchuelerZuLerngruppen":
                 anz = self.generator.addSuSIdsZuLerngruppen()
                 self.report_text.insert(tk.END,f"Es wurden {anz} Verknüpfungen erstellt\n")
@@ -130,8 +139,7 @@ class ReportApp(tk.Tk):
                 self.report_text.insert(tk.END, "Externe Schüler mit Status 6:\n")
                 self.report_text.insert(tk.END, self.generator.writeSuSCSV(statusList=[6], filename="StudentExternal.csv"))
             case "lehrer_csv":
-                self.report_text.insert(tk.END,f"To be done\n")
-                pass
+                self.report_text.insert(tk.END, self.generator.writeLuLCSV())
             case "Jahrgangsteams":
                 self.generator.edit_jahrgangsteams(self)
             case "ClearScreen":

@@ -61,10 +61,90 @@ class Generator():
                 print(f"Key von Lerngruppen wird übertragen: {key}")
                 setattr(self, key, value)
 
+    def ergaenzeLehrer(self):
+        """ ergänzt möglicherweise fehlende Lehrer aus der Datenbank """
+        ergText = ""
+        lehrer_export = sv.gibLehrerListe()
+        lehrer_lookup = {obj["id"]: obj for obj in lehrer_export}
+        ergText += f"Es gibt {len(lehrer_lookup)} Lehrer in der Datenbank\n"
+
+        # sicherstellen, dass Strukturen existieren
+        if not hasattr(self, "lehrer"):
+            ergText += "Die Lehrerdaten waren noch gar nicht vorhanden\n"
+            self.lehrer = []
+        if "lehrer" not in self.lookupDict:
+            ergText += "LookupDicts müssen noch erstellt werden\n"
+            self.generateLookups()
+
+        # alle Lerngruppen durchgehen
+        for lg in getattr(self, "lerngruppen", []):
+            for lid in lg.get("idsLehrer", []):
+                if lid in self.lookupDict["lehrer"]:
+                    continue
+                if lid in lehrer_lookup:
+                    ergText+=f'Lehrer {lehrer_lookup[lid].get("kuerzel","?")} mit id {lid} wird übernommen\n'
+                    lehrer_obj = lehrer_lookup[lid]
+                    # in LookupDict übernehmen
+                    self.lookupDict["lehrer"][lid] = lehrer_obj
+                    # in Liste anhängen
+                    self.lehrer.append(lehrer_obj)
+                else:
+                    print(f"Achtung: Lehrer-ID {lid} nicht im Export gefunden.")
+        return ergText
+
+
     def generateLookups(self):
         for key in ["jahrgaenge","klassen","lehrer","faecher","lerngruppen", "schueler"]:
             self.lookupDict[key] = {obj["id"]: obj for obj in getattr(self, key, [])}
 
+    def addKlassenleitungsIdsZuLuL(self):
+        # Zähler als Rückmeldung der Tätigkeit
+        count = 0
+
+        # sicherstellen, dass das lookupDict existiert
+        if len(getattr(self.lookupDict,"lehrer",{}))==0 or len(self.lookupDicts.get("klassen",{})) == 0:
+            self.generateLookups()
+
+        # sicherstellen, dass jedes LehrerObjekt ein Feld idsKlassenleitung hat
+        for l in self.lookupDict.get("lehrer", {}).values():
+            l.setdefault("idsKlassenleitung", [])
+
+        # alle klassen durchgehen
+        for klasse in getattr(self, "klassen", []):
+            klassen_id = klasse["id"]
+            for lul_id in klasse.get("idsKlassenlehrer", []):
+                if lul_id in self.lookupDict["lehrer"]:
+                    ids = self.lookupDict["lehrer"][lul_id]["idsKlassenleitung"]
+                    if klassen_id not in ids:   # doppelte vermeiden
+                        ids.append(klassen_id)
+                        count+=1
+
+        return count
+    
+    def addLerngruppenIdsZuLuL(self):
+        # Zähler als Rückmeldung der Tätigkeit
+        count = 0
+
+        # sicherstellen, dass das lookupDict existiert
+        if len(getattr(self.lookupDict,"lehrer",{}))==0 or len(self.lookupDicts.get("lerngruppen",{})) == 0:
+            self.generateLookups()
+
+        # sicherstellen, dass jedes LehrerObjekt ein Feld idsLerngruppen hat
+        for l in self.lookupDict.get("lehrer", {}).values():
+            l.setdefault("idsLerngruppen", [])
+
+        # alle lerngruppen durchgehen
+        for lg in getattr(self, "lerngruppen", []):
+            lg_id = lg["id"]
+            for lul_id in lg.get("idsLehrer", []):
+                if lul_id in self.lookupDict["lehrer"]:
+                    ids = self.lookupDict["lehrer"][lul_id]["idsLerngruppen"]
+                    if lg_id not in ids:   # doppelte vermeiden
+                        ids.append(lg_id)
+                        count+=1
+
+        return count
+    
     def addSuSIdsZuLerngruppen(self):
         # Zähler als Rückmeldung der Tätigkeit
         count = 0
@@ -227,7 +307,63 @@ class Generator():
         return ergText
 
     def writeLuLCSV(self):
-        pass
+        ergText = ""
+        # Voraussetzungen prüfen (ReferenzID vorhanden, TeamsBez in den Lerngruppen)
+        if not all("referenzId" in lehrer for lehrer in getattr(self,"lehrer",{})):
+            return "Keine Schüler vorhanden oder nicht alle haben eine referenzId\n"
+        if not all("teamBez" in lerngruppe for lerngruppe in getattr(self,"lerngruppen",{})):
+            return "Nicht alle Lerngruppen haben eine Teams-Bezeichnung (key: teamBez)\n"
+        with open("Teacher.csv", mode="w", newline="", encoding="utf-8") as csvfile:
+            writer = csv.writer(csvfile, delimiter=";")
+            # Original Kopfzeile: ReferenzId;Vorname;Nachname;Klassen;Gruppen
+            writer.writerow(["ReferenzId", "Vorname", "Nachname", "Klassen", "Gruppen"])  # Kopfzeile
+
+            count = 0
+            lookup_lg = self.lookupDict.get("lerngruppen",{})
+            lookup_klassen = self.lookupDict.get("klassen",{})
+
+            for l in getattr(self,"lehrer",{}):
+                referenzId = l.get("referenzId")
+                nachname = l.get("nachname")
+                vorname = l.get("vorname")
+                ids_lerngruppen = l.get("idsLerngruppen", [])
+                ids_klassen = l.get("idsKlassenleitung", [])
+
+                klassen_liste=[]
+
+                if ids_klassen:
+                    for klassen_id in ids_klassen:
+                        klasse = lookup_klassen.get(klassen_id,{})
+                        if not klasse:
+                            ergText+=f"Klasse mit {klassen_id} nicht gefunden\n"
+                            continue
+                        bezeichnung = "^"+klasse.get("kuerzelAnzeige")
+                        klassen_liste.append(bezeichnung)
+                else:
+                    ergText+=f"⚠️  {nachname}, {vorname} hat keine Klassenleitungen\n"
+
+                klassen = "|".join(klassen_liste)
+
+                # TeamsListe wird mit der Jahrgansliste "Lehrer" Initialisiert
+                teams_liste = list(self.jahrgangsteams.get("Lehrer", []))
+
+                if ids_lerngruppen:
+                    for klassen_id in ids_lerngruppen:
+                        klasse = lookup_lg.get(klassen_id,{})
+                        if not klasse:
+                            ergText+=f"Lerngruppe mit {klassen_id} nicht gefunden\n"
+                            continue
+                        bezeichnung = klasse.get("teamBez")
+                        teams_liste.append(bezeichnung)
+                else:
+                    ergText+=f"⚠️  {nachname}, {vorname} hat keine Lerngruppe\n"
+
+                kurse = "|".join(teams_liste)
+                count += 1
+                writer.writerow([referenzId, vorname, nachname, klassen, kurse])
+
+        ergText+=(f"✅ CSV-Datei 'Teacher.csv' wurde mit {count} Einträgen erstellt.\n")
+        return ergText
 
     def import_referenz_ids(self, master, art="schueler", idBez="id"):
         """CSV wählen, Spalten für Schüler-ID und Referenz-ID wählen und zuweisen."""
@@ -316,6 +452,8 @@ class Generator():
         win.transient(master)
         win.grab_set()
         win.columnconfigure(1, weight=1)
+        # größere Startgröße
+        win.geometry("400x300")
 
         # Widgets
         ttk.Label(win, text="Jahrgang (z. B. 09, EF):").grid(row=0, column=0, sticky="w", padx=8, pady=(10,4))

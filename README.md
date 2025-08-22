@@ -47,9 +47,15 @@ Bei den Lehrern gibt es keine eindeutige ID, daher wird hier das kuerzel als Zuo
 
 Als Alternative kann auch die Schild-ID als Referenz-ID genutzt werden. Es sollte jedoch jeder Schüler eine ReferenzID haben, bevor die Export-Datei generiert wird.
 
-### Jahrgangsteams
+### Jahrgangsteams und LehrerTeams
 
 Manchmal möchte man den Schülern eines Jahrgangs noch Teams zuweisen, z.B. der EF ein Team Abi28 oder dem Jahrgang 9 und 10 ein BO-Team. Dies kann in diesem Dialog erfolgen und Schüler aus dem Jahrganag erhalten dann beim Export dieses Team bzw. auch Teams.
+
+Besonders ist hier das Team für den Jahrgang **Lehrer**. Dieser Jahrgang wird allen Lehrern zugeordnet. Hier kann man z.B. die Gruppe * zuordnen um einzustellen, dass alte Gruppen erhalten bleiben.
+
+### Lehrer ergänzen
+
+Aktuell (22.08.2025) sind in dem Lerngruppenexport nicht alle Lehrer enthalten - ich habe diese über einen Anknüpfungspunkt der API ergänzt. Lehrer die nicht in dem Lerngruppenexport vorhanden sind aber in lerngruppen referenziert werden, werden dann bei lehrern ergänzt. Dann muss natürlich wieder die Referenz-ID zugewiesen werden usw.
 
 ### Export-Dateien erstellen
 
