@@ -229,7 +229,7 @@ class Generator():
     def writeLuLCSV(self):
         pass
 
-    def import_referenz_ids(self, master):
+    def import_referenz_ids(self, master, art="schueler", idBez="id"):
         """CSV wählen, Spalten für Schüler-ID und Referenz-ID wählen und zuweisen."""
         # CSV-Datei auswählen
         filepath = filedialog.askopenfilename(
@@ -252,7 +252,7 @@ class Generator():
         win = tk.Toplevel(master)
         win.title("Spalten auswählen")
 
-        tk.Label(win, text="Spalte mit Schüler-ID:").grid(row=0, column=0, sticky="w", padx=8, pady=6)
+        tk.Label(win, text=f"Spalte mit ID ({idBez}):").grid(row=0, column=0, sticky="w", padx=8, pady=6)
         cb_sid = ttk.Combobox(win, values=columns, state="readonly")
         cb_sid.grid(row=0, column=1, padx=8, pady=6)
 
@@ -275,6 +275,7 @@ class Generator():
                     try:
                         mapping[int(sid)] = ref
                     except ValueError:
+                        mapping[sid] = ref
                         continue
             result["mapping"] = mapping
             win.destroy()
@@ -286,21 +287,24 @@ class Generator():
 
         if "mapping" not in result:
             return "FEHLER: Es konnte keine Zuordnung erstellt werden\n"
+        
+        print(result["mapping"])
 
-        # Schülerobjekte aktualisieren
+        # Objekte aktualisieren
         count_ref = 0
         count_id = 0
-        for schueler in getattr(self, "schueler", []):
-            sid = schueler.get("id")
-            if sid in result["mapping"]:
-                schueler["referenzId"] = result["mapping"][sid]
+        for obj in getattr(self, art, []):
+            objid = obj.get(idBez)
+            print(objid)
+            if objid in result["mapping"]:
+                obj["referenzId"] = result["mapping"][objid]
                 count_ref+=1
             else:
-                schueler["referenzId"] = sid
+                obj["referenzId"] = objid
                 count_id+=1
 
         print(f"{len(result['mapping'])} Referenz-IDs zugewiesen.")
-        return f"{count_ref} Referenz-IDs zugewisen - {count_id} mal die Schild-Id als Referenz\n"
+        return f"{count_ref} Referenz-IDs zugewisen - {count_id} mal die {idBez} als Referenz\n"
 
     def edit_jahrgangsteams(self, master):
         # sicherstellen, dass das Attribut existiert

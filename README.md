@@ -39,7 +39,9 @@ Ob der Vorgang erfolgreich oder sinnvoll war, kann z.B. über Statistik erstelle
 
 ### ReferenzIDs zuweisen
 
-Den Schülern (und später auch den Lehreren) sollten für die Verwaltung in Teams und MNSpro Referenz-IDs zugewiesen werden. Leider gibt der SVWS-Server (aus Datenschutzgründen?) die oft verwendete GUID nicht über die Schnittstelle (API) raus. Daher kann sie z.B. direkt aus Schild3 exportiert werden (Interne ID und eindeutige ID). Die dabei entstandene CSV-Datei (evtl. txt in csv umbenenen) kann hier eingelesen werden und jedem Schüler wird dann entsprechend die GUID als ReferenzId für Teams bzw. MNSpro zugewisen.
+Den Schülern (und über den anderen Button den Lehreren) sollten für die Verwaltung in Teams und MNSpro Referenz-IDs zugewiesen werden. Leider gibt der SVWS-Server (aus Datenschutzgründen?) die oft verwendete GUID nicht über die Schnittstelle (API) raus. Daher kann sie z.B. direkt aus Schild3 exportiert werden (Interne ID und eindeutige ID). Die dabei entstandene CSV-Datei (evtl. txt in csv umbenenen) kann hier eingelesen werden und jedem Schüler wird dann entsprechend die GUID als ReferenzId für Teams bzw. MNSpro zugewisen.
+
+Bei den Lehrern gibt es keine eindeutige ID, daher wird hier das kuerzel als Zuordnung verwendet. Aus Schild3 muss also eine csv-Datei mit Kürzel und eindeutiger ID (GUID) exportiert werden.
 
 ### SchildID als Referenz ID
 

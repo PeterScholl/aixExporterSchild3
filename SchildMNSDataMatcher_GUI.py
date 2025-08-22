@@ -69,7 +69,7 @@ class ReportApp(tk.Tk):
         button_texts = [
             "Verbindungseinstellung", "Abschnitts-ID holen", "Lerngruppen holen", "Statistik anzeigen", 
             "generateLookupDicts", "idsSchuelerZuLerngruppen", "TeamBezErstellen", "Referenz-IDs aus File", 
-            "ReferenzIDs aus SuS-Ids", "b10","Jahrgangsteams","TempHilfsfunktion",
+            "ReferenzIDs aus SuS-Ids", "LehrerReferenzen aus File","Jahrgangsteams","TempHilfsfunktion",
             "schueler_csv", "sus_extern_csv", "lehrer_csv", "ClearScreen"
         ]
         
@@ -121,7 +121,9 @@ class ReportApp(tk.Tk):
                         schueler["referenzId"]=schueler.get("id")
                 self.report_text.insert(tk.END,f'Bei {count} von {len(getattr(self.generator, "schueler", {}))} Schülern die ReferenzId-gesetzt\n')
             case "Referenz-IDs aus File":
-                self.generator.import_referenz_ids(self)                
+                self.report_text.insert(tk.END,self.generator.import_referenz_ids(self))     
+            case "LehrerReferenzen aus File":
+                self.report_text.insert(tk.END,self.generator.import_referenz_ids(self,art="lehrer",idBez="kuerzel"))     
             case "schueler_csv":
                 self.report_text.insert(tk.END, self.generator.writeSuSCSV())
             case "sus_extern_csv":
