@@ -1,3 +1,5 @@
+import tkinter as tk
+from tkinter import filedialog, ttk
 import csv
 import sys
 from collections import Counter
@@ -215,12 +217,81 @@ class Generator():
         ergText+=(f"✅ CSV-Datei '{filename}' wurde mit {count} Einträgen erstellt.\n")
         return ergText
 
-    def writeExternalCSV(self):
-        # Status = 6 (gibt es auch Gastschüler?!)
-        pass
-
     def writeLuLCSV(self):
         pass
+
+    def import_referenz_ids(self, master):
+        """CSV wählen, Spalten für Schüler-ID und Referenz-ID wählen und zuweisen."""
+        # CSV-Datei auswählen
+        filepath = filedialog.askopenfilename(
+            parent=master,
+            title="CSV-Datei wählen",
+            filetypes=[("CSV-Dateien", "*.csv"), ("Alle Dateien", "*.*")]
+        )
+        if not filepath:
+            return "Kein File gewählt\n"
+
+        with open(filepath, newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f, delimiter=";", quotechar='"')
+            rows = list(reader)
+        if not rows or not reader.fieldnames:
+            return "FEHLER: Enthält keine Daten\n"
+
+        columns = reader.fieldnames
+
+        # Toplevel für Spaltenauswahl
+        win = tk.Toplevel(master)
+        win.title("Spalten auswählen")
+
+        tk.Label(win, text="Spalte mit Schüler-ID:").grid(row=0, column=0, sticky="w", padx=8, pady=6)
+        cb_sid = ttk.Combobox(win, values=columns, state="readonly")
+        cb_sid.grid(row=0, column=1, padx=8, pady=6)
+
+        tk.Label(win, text="Spalte mit Referenz-ID:").grid(row=1, column=0, sticky="w", padx=8, pady=6)
+        cb_ref = ttk.Combobox(win, values=columns, state="readonly")
+        cb_ref.grid(row=1, column=1, padx=8, pady=6)
+
+        result = {}
+
+        def on_ok():
+            sid_col = cb_sid.get()
+            ref_col = cb_ref.get()
+            if not sid_col or not ref_col:
+                return
+            mapping = {}
+            for row in rows:
+                sid = row.get(sid_col)
+                ref = row.get(ref_col)
+                if sid and ref:
+                    try:
+                        mapping[int(sid)] = ref
+                    except ValueError:
+                        continue
+            result["mapping"] = mapping
+            win.destroy()
+
+        ttk.Button(win, text="OK", command=on_ok).grid(row=2, column=0, columnspan=2, pady=8)
+
+        win.grab_set()
+        win.wait_window()
+
+        if "mapping" not in result:
+            return "FEHLER: Es konnte keine Zuordnung erstellt werden\n"
+
+        # Schülerobjekte aktualisieren
+        count_ref = 0
+        count_id = 0
+        for schueler in getattr(self, "schueler", []):
+            sid = schueler.get("id")
+            if sid in result["mapping"]:
+                schueler["referenzId"] = result["mapping"][sid]
+                count_ref+=1
+            else:
+                schueler["referenzId"] = sid
+                count_id+=1
+
+        print(f"{len(result['mapping'])} Referenz-IDs zugewiesen.")
+        return f"{count_ref} Referenz-IDs zugewisen - {count_id} mal die Schild-Id als Referenz\n"
 
 
 
