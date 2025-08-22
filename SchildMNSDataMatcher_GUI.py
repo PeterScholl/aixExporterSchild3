@@ -1,4 +1,5 @@
 import json
+import random
 import os
 import tkinter as tk
 import generator as logic
@@ -66,10 +67,10 @@ class ReportApp(tk.Tk):
 
         # 10 Buttons im Grid
         button_texts = [
-            "Verbindungseinstellung", "Abschnitts-ID holen", "Report", "Lerngruppen holen",
-            "Statistik anzeigen", "gerateLookupDicts", "idsSchulerZuLerngruppen", "TeamBezErstellen",
-            "Referenz-IDs aus File", "b10","b11","TempHilfsfunktion",
-            "schueler_csv", "sus_extern_csv", "lehrer_csv", "SuS-ID->ReferenzID"
+            "Verbindungseinstellung", "Abschnitts-ID holen", "Lerngruppen holen", "Statistik anzeigen", 
+            "generateLookupDicts", "idsSchuelerZuLerngruppen", "TeamBezErstellen", "Referenz-IDs aus File", 
+            "ReferenzIDs aus SuS-Ids", "b10","Jahrgangsteams","TempHilfsfunktion",
+            "schueler_csv", "sus_extern_csv", "lehrer_csv", "ClearScreen"
         ]
         
         # Buttons in einem <x> times 4 Grid
@@ -92,18 +93,15 @@ class ReportApp(tk.Tk):
             case "Lerngruppen holen":
                 self.generator.lerngruppenHolen()
                 self.report_text.insert(tk.END,f"Lerngruppen geholt\n")
-            case "Report":
-                print("Report generieren")
-                self.generate_report()
             case "Statistik anzeigen":
                 self.show_statistik()
-            case "gerateLookupDicts":
+            case "generateLookupDicts":
                 self.generator.generateLookups()
                 ergtext = "Erstellte Lookup-Dictionaries:\n"
                 for key, value in self.generator.lookupDict.items():
                     ergtext+=f"Einträge für den key {key}: {len(value)}\n"
                 self.report_text.insert(tk.END,ergtext)
-            case "idsSchulerZuLerngruppen":
+            case "idsSchuelerZuLerngruppen":
                 anz = self.generator.addSuSIdsZuLerngruppen()
                 self.report_text.insert(tk.END,f"Es wurden {anz} Verknüpfungen erstellt\n")
             case "TeamBezErstellen":
@@ -113,7 +111,7 @@ class ReportApp(tk.Tk):
                 self.report_text.insert(tk.END,f"Es gibt folgende kursartKuerzel: {res}\n")
                 res = collect_values(getattr(self.generator,"schueler",[]),"status")
                 self.report_text.insert(tk.END,f"Es gibt folgende Status-Werte bei den SuS: {res}\n")
-            case "SuS-ID->ReferenzID":
+            case "ReferenzIDs aus SuS-Ids":
                 count = 0
                 for schueler in getattr(self.generator, "schueler", {}):
                     if "id" in schueler:
@@ -130,6 +128,10 @@ class ReportApp(tk.Tk):
             case "lehrer_csv":
                 self.report_text.insert(tk.END,f"To be done\n")
                 pass
+            case "Jahrgangsteams":
+                self.generator.edit_jahrgangsteams(self)
+            case "ClearScreen":
+                self.report_text.delete(1.0, tk.END)
             case _:
                 print("Ubekannter Button")
 
@@ -269,22 +271,22 @@ class ReportApp(tk.Tk):
         
         # Let Tkinter calculate the required size
         settings_window.after(80, lambda: self.adjust_size(settings_window))
-        
-        
-    def generate_report(self):
-        report = "Report"
-        
-        with open('report.txt', 'w',encoding='utf-8') as f:
-            f.write(report)
-        
-        self.report_text.delete(1.0, tk.END)
-        self.report_text.insert(tk.END, report)
 
     def show_statistik(self):
         report = "Anzahlen der Einträge in den verschiedenen Keys:\n"
         for key in ["jahrgaenge","klassen","lehrer","faecher","lerngruppen", "schueler"]:
             report += f"{key}: {len(getattr(self.generator,key,[]))}\n"
         
+        # Zufällige Elemente aus den wichtigsten listen anzeigen
+        for listenname in ["schueler","lerngruppen","lehrer"]:
+            report += f'\nZufälliges Element aus "{listenname}" anzeigen:\n'
+            akt_liste = getattr(self.generator, listenname, [])
+            if akt_liste:
+                s = random.choice(akt_liste)
+                # als schön formatierten JSON-String
+                report += json.dumps(s, indent=2, ensure_ascii=False)
+                report += "\n"
+
         self.report_text.delete(1.0, tk.END)
         self.report_text.insert(tk.END, report)
 

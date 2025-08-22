@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import filedialog, ttk
+from tkinter import filedialog, ttk, messagebox
 import csv
 import sys
 from collections import Counter
@@ -196,9 +196,11 @@ class Generator():
                 nachname = s.get("nachname")
                 vorname = s.get("vorname")
                 klasse = self.get_klasse_von_schueler(s.get("id"))
+                jahrgang = self.get_jahrgang_von_schueler(s.get("id")) # für Jahrgangsteams
                 ids_lerngruppen = s.get("idsLerngruppen", [])
 
-                teams_liste = []
+                # TeamsListe wird mit der Jahrgansliste Initialisiert
+                teams_liste = list(self.jahrgangsteams.get(jahrgang, []))
 
                 if ids_lerngruppen:
                     for lg_id in ids_lerngruppen:
@@ -294,6 +296,104 @@ class Generator():
         print(f"{len(result['mapping'])} Referenz-IDs zugewiesen.")
         return f"{count_ref} Referenz-IDs zugewisen - {count_id} mal die Schild-Id als Referenz\n"
 
+    def edit_jahrgangsteams(self, master):
+        # sicherstellen, dass das Attribut existiert
+        if not hasattr(self, "jahrgangsteams") or self.jahrgangsteams is None:
+            self.jahrgangsteams = {}
+
+        win = tk.Toplevel(master)
+        win.title("Jahrgangsteams bearbeiten")
+        win.transient(master)
+        win.grab_set()
+        win.columnconfigure(1, weight=1)
+
+        # Widgets
+        ttk.Label(win, text="Jahrgang (z. B. 09, EF):").grid(row=0, column=0, sticky="w", padx=8, pady=(10,4))
+        e_key = ttk.Entry(win, width=10)
+        e_key.grid(row=0, column=1, sticky="w", padx=8, pady=(10,4))
+
+        ttk.Label(win, text="Teams (kommagetrennt):").grid(row=1, column=0, sticky="nw", padx=8, pady=4)
+        e_vals = ttk.Entry(win)
+        e_vals.grid(row=1, column=1, sticky="ew", padx=8, pady=4)
+
+        # Liste vorhandener Jahrgänge
+        ttk.Label(win, text="Vorhandene Jahrgänge:").grid(row=2, column=0, sticky="nw", padx=8, pady=4)
+        lb = tk.Listbox(win, height=8, exportselection=False)
+        lb.grid(row=2, column=1, sticky="nsew", padx=8, pady=4)
+        win.rowconfigure(2, weight=1)
+
+        # Buttons
+        btns = ttk.Frame(win)
+        btns.grid(row=3, column=0, columnspan=2, sticky="e", padx=8, pady=8)
+        b_add    = ttk.Button(btns, text="Neu/Übernehmen")
+        b_delete = ttk.Button(btns, text="Löschen")
+        b_close  = ttk.Button(btns, text="Schließen")
+        b_add.grid(row=0, column=0, padx=4)
+        b_delete.grid(row=0, column=1, padx=4)
+        b_close.grid(row=0, column=2, padx=4)
+
+        # Helper
+        def normalize_values(text: str) -> list[str]:
+            vals = [v.strip() for v in text.split(",") if v.strip()]
+            # optional Duplikate entfernen, Reihenfolge bewahren:
+            seen, out = set(), []
+            for v in vals:
+                if v not in seen:
+                    seen.add(v); out.append(v)
+            return out
+
+        def refresh_listbox(select_key: str | None = None):
+            lb.delete(0, tk.END)
+            for k in sorted(self.jahrgangsteams.keys()):
+                lb.insert(tk.END, k)
+            if select_key and select_key in self.jahrgangsteams:
+                idx = sorted(self.jahrgangsteams.keys()).index(select_key)
+                lb.selection_clear(0, tk.END)
+                lb.selection_set(idx)
+                lb.see(idx)
+
+        def load_from_selection(_evt=None):
+            sel = lb.curselection()
+            if not sel:
+                return
+            key = sorted(self.jahrgangsteams.keys())[sel[0]]
+            e_key.delete(0, tk.END); e_key.insert(0, key)
+            vals = self.jahrgangsteams.get(key, [])
+            e_vals.delete(0, tk.END); e_vals.insert(0, ", ".join(vals))
+
+        def add_or_update():
+            key = e_key.get().strip()
+            if not key:
+                messagebox.showwarning("Hinweis", "Bitte Jahrgang eingeben.", parent=win)
+                return
+            vals = normalize_values(e_vals.get())
+            self.jahrgangsteams[key] = vals
+            refresh_listbox(select_key=key)
+
+        def delete_selected():
+            sel = lb.curselection()
+            key = e_key.get().strip()
+            # Bevorzugt: selektierten Key löschen; sonst Feld-Key
+            if sel:
+                key = sorted(self.jahrgangsteams.keys())[sel[0]]
+            if not key or key not in self.jahrgangsteams:
+                return
+            if messagebox.askyesno("Löschen", f"Jahrgang '{key}' wirklich löschen?", parent=win):
+                del self.jahrgangsteams[key]
+                e_key.delete(0, tk.END)
+                e_vals.delete(0, tk.END)
+                refresh_listbox()
+
+        # Bindings
+        lb.bind("<<ListboxSelect>>", load_from_selection)
+        b_add.configure(command=add_or_update)
+        b_delete.configure(command=delete_selected)
+        b_close.configure(command=win.destroy)
+        win.protocol("WM_DELETE_WINDOW", win.destroy)
+
+        # initial füllen
+        refresh_listbox()
+        win.wait_window()
 
 
 
