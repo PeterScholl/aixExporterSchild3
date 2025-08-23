@@ -175,6 +175,8 @@ class Generator():
         resultText = "" #Ergebnistext
         count=0 #Zähler für das Ergebnis
         countlg=0 # Zähler insgesamt
+        countjg=0 # Zähler für nur Jahrgang als Prefix
+        countno=0 # Zähler für kein Prefix
 
         lookupSuS = self.lookupDict.get("schueler",{})
         if len(lookupSuS) == 0:
@@ -189,13 +191,15 @@ class Generator():
                 if lgbezeichnung != None:
                     if kursartKuerzel in getattr(self, "kursarten_ohne_klasse", []):
                         count += 1
+                        countno +=1
                         lg["teamBez"] = lgbezeichnung
                         lg["jahrgang"] = None
                     else: # Jetzt muss entweder Jahrgang oder Klasse vorangestellt werden
                         idsSchueler = lg.get("idsSchueler", [])
                         if (len(idsSchueler) > 0):
-                            if kursartKuerzel in getattr(self, "kursart_nur_mit_jahrgang", []):
+                            if kursartKuerzel in getattr(self, "kursarten_nur_mit_jahrgang", []):
                                 #Jahrgang eines Schuelers holen
+                                countjg+=1
                                 prefix = self.get_jahrgang_von_schueler(idsSchueler[0])
                                 jahrgang = prefix
                             else:
@@ -216,7 +220,8 @@ class Generator():
             else: #kursartkuerzel gibt es nicht
                 resultText+= f'Kein Kursartkuerzel bei {lg.get("id",lg)} - Wert {kursartKuerzel}\n'
 
-        resultText+=f'Es wurden {count} Teambezeichnungen bei insgesamt {countlg} Lerngruppen zugeordnet\n'
+        resultText+=f'Es wurden {count} Teambezeichnungen bei insgesamt {countlg} Lerngruppen zugeordnet\n' 
+        resultText+=f'Davon bekamen {countjg} nur den Jahrgang als Prefix und {countno} kein Prefix\n'
         return resultText
     
     def get_klasse_von_schueler(self, schueler_id: int) -> str | None:
