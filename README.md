@@ -59,6 +59,10 @@ Besonders ist hier das Team für den Jahrgang **Lehrer**. Dieser Jahrgang wird a
 
 Aktuell (22.08.2025) sind in dem Lerngruppenexport nicht alle Lehrer enthalten - ich habe diese über einen Anknüpfungspunkt der API ergänzt. Lehrer die nicht in dem Lerngruppenexport vorhanden sind aber in lerngruppen referenziert werden, werden dann bei lehrern ergänzt. Dann muss natürlich wieder die Referenz-ID zugewiesen werden usw.
 
+### Kontrollfunktionen
+
+Man kann mittels Statistik erstellen schon ein wenig prüfen auch die TempHilfsFunktion gibt einige Einblicke. In der letzten Buttonreihe sind Kontrollfunktionen geplant, so z.B. die Liste aller TeamBezeichnungen, damit kann man diese noch einmal auf Sinnhaftigkeit prüfen.
+
 ### Export-Dateien erstellen
 
 Der eigentliche Export geschieht über die drei Buttons schueler_csv, sus_extern_csv und lehrer_csv - wenn alles gut läuft werden die entsprechenden csv-Dateien erstellt.

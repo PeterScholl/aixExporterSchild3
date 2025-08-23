@@ -82,7 +82,8 @@ class ReportApp(tk.Tk):
             "generateLookupDicts", "idsSchuelerZuLerngruppen", "TeamBezErstellen", "Referenz-IDs aus File", 
             "ReferenzIDs aus SuS-Ids", "LehrerReferenzen aus File","Jahrgangsteams","TempHilfsfunktion",
             "idsLerngruppenZuLehrern","idsKlassenleitungenZuLehrern","ErgänzeLehrerAusDB","b16",
-            "schueler_csv", "sus_extern_csv", "lehrer_csv", "ClearScreen"
+            "schueler_csv", "sus_extern_csv", "lehrer_csv", "ClearScreen",
+            "ListeTeamBez","b22","b23","b24"
         ]
         
         # Buttons in einem <x> times 4 Grid
@@ -150,6 +151,12 @@ class ReportApp(tk.Tk):
                 self.generator.edit_jahrgangsteams(self)
             case "ClearScreen":
                 self.report_text.delete(1.0, tk.END)
+            case "ListeTeamBez":
+                teambez = sorted(collect_values(getattr(self.generator,"lerngruppen",[]),"teamBez"))
+                ergtext = f"Es gibt {len(teambez)} Lerngruppen in alphabetischer Sortierung:\n"
+                ergtext += "\n".join(teambez)
+                ergtext += "\n"
+                self.report_text.insert(tk.END,ergtext)
             case _:
                 print("Ubekannter Button")
 
@@ -323,12 +330,14 @@ class ReportApp(tk.Tk):
         self.report_text.insert(tk.END, ergText)
 
 
+
 def collect_values(objs, key, unique=True):
     """Gibt alle vorkommenden Werte zu einem Key aus einer Liste von Dicts zurück."""
     if unique:
         return list({obj.get(key) for obj in objs if key in obj})
     else: 
         return [obj.get(key) for obj in objs if key in obj]
+
 
 def count_lerngruppen_pro_jahrgang(lerngruppen):
     counts = {}
