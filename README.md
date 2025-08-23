@@ -1,9 +1,29 @@
 # Anleitung zur Verwendung dieses Tools
 
-## Programmstart
+**ACHTUNG** Dies ist ein Werkzeug kein fertiges Programm. Für Fragen zur Nutzung kann mir gerne eine Nachricht geschrieben werden.
 
-Zunächst muss das Zertifikat des SVWS-Servers als **server.pem** in den Ordner des Programms gespeichert oder kopiert werden. Dann
-**SchildMNSDataMatcher_GUI.py starten**
+## Quickstart
+
+Exe-Datei herunterladen und starten - diese verbindet sich mit dem Nightly-Server von svws-nrw.de und dem Schema GymAbiLite. Danach einfach die Buttons in der Reihenfolge links oben beginnend ausprobieren.
+
+## normaler Programmstart
+
+Einfach **SchildMNSDataMatcher_GUI.py** bzw die Exe starten.
+
+**WARNUNG** Das Serverzertifikat wird automatisch heruntergeladen, wenn es nicht existiert - ggf. die Datei ``server.pem`` prüfen.
+
+Eine ``status.json`` - Datei wird automatisch angelegt. Wenn mal etwas nicht wie erwartet läuft, vielleicht auch mal in die Console schauen.
+
+Für einen Test ohne eigenen SVWS-Server können folgende Daten unter dem Button Verbindungseinstellung verwendet werden (Standard-Programmvorgaben)
+
+````bash
+    "host": "nightly.svws-nrw.de",
+    "schema": "GymAbiLite",
+    "username": "admin",
+    "password": "",
+    "jahr": 2018,
+    "abschnitt": 1,
+````
 
 ## Bedienung
 

@@ -10,12 +10,12 @@ import config_gui
 
 class Generator():
     def __init__(self):
-        self.host = "localhost"
-        self.schema="svwsdb"
+        self.host = "nightly.svws-nrw.de"
+        self.schema="GymAbiLite"
         self.base_url=f'https://{self.host}/db/{self.schema}'
         self.username = "admin"
-        self.password = "pass"
-        self.jahr = 2025
+        self.password = ""
+        self.jahr = 2018
         self.abschnitt = 1
         self.svws_abschnitts_id = None
         self.kursarten_ohne_klasse = []
@@ -35,14 +35,14 @@ class Generator():
         
     def configValues(self, root):
         cfg = {}
-        cfg["schema"] = self.schema if self.schema else "svwsdb"
-        cfg["host"]= self.host if self.host else "localhost"
+        cfg["schema"] = self.schema if self.schema else "GymAbiLite"
+        cfg["host"]= self.host if self.host else "nightly.svws-nrw.de"
         cfg["username"] = self.username if self.username else "admin"
-        cfg["password"] = self.password if self.password else "pass"
-        cfg["jahr"] = self.jahr if self.jahr else 2025
+        cfg["password"] = self.password if self.password else ""
+        cfg["jahr"] = self.jahr if self.jahr else 2018
         cfg["abschnitt"] = self.abschnitt if self.abschnitt else 1
-        cfg["kursarten_ohne_klasse"] = self.kursarten_ohne_klasse if self.kursarten_ohne_klasse else ["AGGT"]
-        cfg["kursarten_nur_mit_jahrgang"] = getattr(self,"kursarten_nur_mit_jahrgang", [])
+        cfg["kursarten_ohne_klasse"] = self.kursarten_ohne_klasse if self.kursarten_ohne_klasse else ["AGGT","EGS1","FOGT"]
+        cfg["kursarten_nur_mit_jahrgang"] = getattr(self,"kursarten_nur_mit_jahrgang", ["LK","GK","WPII","PUT"])
 
         print("show config - start")
 
@@ -55,6 +55,7 @@ class Generator():
         sv.setConfig(self.base_url, (self.username, self.password))
 
     def lerngruppenHolen(self, keys = ["jahrgaenge","klassen","lehrer","faecher","lerngruppen", "schueler"]):
+        sv.setConfig(self.base_url, (self.username, self.password))
         lerngruppen_export = sv.gibLerngruppen(self.svws_abschnitts_id,1)
         for key, value in lerngruppen_export.items():
             if key in keys:

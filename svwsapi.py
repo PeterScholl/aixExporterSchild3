@@ -3,19 +3,78 @@ import os
 import io
 import gzip
 import json
+import socket, ssl
+from urllib.parse import urlparse
+from ssl import DER_cert_to_PEM_cert
+
 
 base_url = ""
 auth = ()
-verify = True  # Standard: Zertifikat wird geprüft
+verify = ""
+
+def download_server_cert(pem_path="server.pem"):
+    if not base_url: return
+    if not base_url.startswith("https://"):
+        u = urlparse("https://"+base_url)
+    else:
+        u = urlparse(base_url)
+    if u.scheme != "https":
+        raise ValueError("URL muss mit https:// beginnen")
+    host = u.hostname
+    port = u.port or 443
+
+    #ctx = ssl.create_default_context()
+    
+    # Unverifizierter Context NUR zum Abholen des Zertifikats
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    try:
+        with socket.create_connection((host, port), timeout=10) as sock:
+            with ctx.wrap_socket(sock, server_hostname=host) as ssock:
+                der = ssock.getpeercert(binary_form=True)
+                pem = DER_cert_to_PEM_cert(der)
+        with open(pem_path, "w", encoding="utf-8") as f:
+            f.write(pem)
+    except ConnectionRefusedError as e:
+        # WinError 10061 / Zielrechner verweigert
+        raise RuntimeError(f"Verbindung verweigert ({host}:{port}). Läuft der Dienst?") from e
+    except socket.timeout as e:
+        raise RuntimeError(f"Zeitüberschreitung beim Verbinden zu {host}:{port}.") from e
+    except socket.gaierror as e:
+        # DNS/Name-Auflösung
+        raise RuntimeError(f"Host '{host}' konnte nicht aufgelöst werden: {e}.") from e
+    except TimeoutError as e:
+        # kann separat auftreten
+        raise RuntimeError(f"Timeout zu {host}:{port}.") from e
+    except OSError as e:
+        # Restliche OS-/Netzwerk-Fehler (z. B. Netzwerk unreachable)
+        raise RuntimeError(f"Netzwerkfehler zu {host}:{port}: {e}.") from e
+    return pem_path
 
 # Prüfen, ob server.pem existiert
 if os.path.exists("server.pem"):
     verify = "server.pem"
+else: 
+    try: 
+        download_server_cert()
+    except RuntimeError as err:
+        print(f"❗ {err}")  # oder messagebox.showerror("Fehler", str(err))
+
 
 def setConfig(url: str, auth_tuple: tuple):
     global base_url, auth
     base_url = url
     auth = auth_tuple
+    if os.path.exists("server.pem"):
+        verify = "server.pem"
+    else: 
+        print("❗❗❗ ACHTUNG - Das Server Zertifkat wird heruntergeladen ❗❗❗")
+        try:
+            download_server_cert()
+        except RuntimeError as err:
+            print(f"❗ {err}")  # oder messagebox.showerror("Fehler", str(err))
+
 
 # --- Methoden ---
 def gibIdSchuljahresabschnitt(jahr: int, abschnitt: int) -> int | None:

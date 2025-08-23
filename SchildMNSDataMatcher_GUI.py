@@ -94,6 +94,10 @@ class ReportApp(tk.Tk):
         # Einstellungen speichern
         self.sonderzeichenErsetzen = tk.BooleanVar(value=True) #Ersetzt Sonderzeichen aus der Charmap
 
+        # Status.json prüfen ggf. anlegen
+        if not os.path.exists("status.json"):
+            self.save_state()
+
     def button_clicked(self, text):
         print(f"Button '{text}' clicked")
         match text:
@@ -349,6 +353,8 @@ def count_lerngruppen_pro_jahrgang(lerngruppen):
         counts[jg] = counts.get(jg, 0) + 1 #Wenn nicht vorhanden auf 0 setzen
 
     return counts
+
+
 
 # Anwendung starten
 if __name__ == "__main__":
