@@ -242,6 +242,35 @@ class Generator():
 
         # Kürzel zurückgeben, falls vorhanden
         return klasse.get("kuerzelAnzeige")
+    
+    def get_kl_jg_zu_schuelerIDListe(self, schuelerIDs: list, art: str = "klassen", unique: bool = True) -> list:
+        """
+        Gibt eine Liste der Klassen/Jahrgangs-Kürzel zu den angegebenen Schüler-IDs zurück.
+        - unique=True: doppelte Kürzel werden entfernt
+        """
+        result = []
+        schueler_lookup = self.lookupDict.get("schueler", {})
+        kl_jg_lookup = self.lookupDict.get(art, {})
+
+        for sid in schuelerIDs:
+            schueler = schueler_lookup.get(sid)
+            if not schueler:
+                print(f"Schüler mit ID {sid} nicht gefunden")
+                continue
+            kjid = schueler.get("idKlasse") if art=="klassen" else schueler.get("idJahrgang")
+            if not kjid:
+                print(f"Schüler {sid} hat keine {art}-ID")
+                continue
+            kl_jg = kl_jg_lookup.get(kjid)
+            if not kl_jg:
+                print(f"Klasse/Jahrgang mit ID {sid} nicht gefunden")
+                continue
+            kuerzel = kl_jg.get("kuerzelAnzeige")
+            if kuerzel and (not unique or kuerzel not in result):
+                    result.append(kuerzel)
+
+        return result
+
 
     def get_jahrgang_von_schueler(self, schueler_id: int) -> str | None:
         # Schüler nachschlagen

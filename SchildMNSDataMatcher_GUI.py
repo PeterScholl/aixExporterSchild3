@@ -127,12 +127,7 @@ class ReportApp(tk.Tk):
             case "TeamBezErstellen":
                 self.report_text.insert(tk.END, self.generator.addTeamBezZuLerngruppen())
             case "TempHilfsfunktion":
-                res = collect_values(getattr(self.generator,"lerngruppen",[]),"kursartKuerzel")
-                self.report_text.insert(tk.END,f"Es gibt folgende kursartKuerzel: {res}\n")
-                res = collect_values(getattr(self.generator,"schueler",[]),"status")
-                self.report_text.insert(tk.END,f"Es gibt folgende Status-Werte bei den SuS: {res}\n")
-                lg_pro_jahrgang = count_lerngruppen_pro_jahrgang(getattr(self.generator, "lerngruppen", []))
-                self.report_text.insert(tk.END,f"Es gibt folgende Anzahl Lerngruppen in jedem Jahrgang:\n{lg_pro_jahrgang}\n")
+                self.tempHIlfsfunktion()
             case "ReferenzIDs aus SuS-Ids":
                 count = 0
                 for schueler in getattr(self.generator, "schueler", {}):
@@ -312,6 +307,21 @@ class ReportApp(tk.Tk):
 
         self.report_text.delete(1.0, tk.END)
         self.report_text.insert(tk.END, report)
+
+    def tempHIlfsfunktion(self):
+        res = collect_values(getattr(self.generator,"lerngruppen",[]),"kursartKuerzel")
+        self.report_text.insert(tk.END,f"Es gibt folgende kursartKuerzel: {res}\n")
+        res = collect_values(getattr(self.generator,"schueler",[]),"status")
+        self.report_text.insert(tk.END,f"Es gibt folgende Status-Werte bei den SuS: {res}\n")
+        lg_pro_jahrgang = count_lerngruppen_pro_jahrgang(getattr(self.generator, "lerngruppen", []))
+        self.report_text.insert(tk.END,f"Es gibt folgende Anzahl Lerngruppen in jedem Jahrgang:\n{lg_pro_jahrgang}\n")
+        # Klassen der Schüler einer zufälligen Lerngruppe ausgeben
+        rnd_lg = random.choice(getattr(self.generator, "lerngruppen", [-1]))
+        rnd_lg_bez = rnd_lg.get("teamBez", rnd_lg.get("bezeichnung", "---"))
+        ergText = f"In der Lergruppe {rnd_lg_bez} sind die folgenden Klassen {self.generator.get_kl_jg_zu_schuelerIDListe(rnd_lg.get("idsSchueler",[]))}\n"
+        ergText += f"bzw. die folgenden Jahrgänge {self.generator.get_kl_jg_zu_schuelerIDListe(rnd_lg.get("idsSchueler",[]), art="jahrgaenge")}\n"
+        self.report_text.insert(tk.END, ergText)
+
 
 def collect_values(objs, key, unique=True):
     """Gibt alle vorkommenden Werte zu einem Key aus einer Liste von Dicts zurück."""
