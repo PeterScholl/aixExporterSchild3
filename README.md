@@ -35,7 +35,9 @@ Dieser Schritt ist ein Zwischenschritt um die Teamsbezeichnungen zu erstellen. J
 
 Mit diesem Button wird in jeder Lerngruppe das Attribut **teamBez** erstellt. Dazu können verschieden Kursarten in der Verbindungseinstellung gewählt werden um bei diesem Vorgang die korrekten prefixe zu ermitteln.
 
-Ob der Vorgang erfolgreich oder sinnvoll war, kann z.B. über Statistik erstellen geprüft werden.
+Bei der Erstellung der Teamnamen wird bei Klassenteams und Jahrgangsteams geprüft ob alle Schüler aus einer Klasse bzw. einem Jahrgang sind. Das ist hilfreich, da fehlerhafte Kurszuordnungen in Schild so entdeckt werden können.
+
+Hinweis: Ob der Vorgang erfolgreich oder sinnvoll war, kann dann auch z.B. über Statistik erstellen geprüft werden oder man speichert und schaut sich status.json an.
 
 ### ReferenzIDs zuweisen
 
