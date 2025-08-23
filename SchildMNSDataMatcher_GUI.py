@@ -265,7 +265,7 @@ class ReportApp(tk.Tk):
         
         # Info-Label
         info_label = tk.Label(help_window, text="Anleitung\n\n"+
-            "To be done")
+            "Aktuell gibt es nur das README.md ...")
         info_label.pack(pady=10)
         
         # Link-Label

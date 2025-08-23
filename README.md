@@ -2,6 +2,7 @@
 
 ## Programmstart
 
+Zunächst muss das Zertifikat des SVWS-Servers als server.pem in den Ordner des Programms gespeichert oder kopiert werden. Dann
 SchildMNSDataMatcher_GUI.py starten
 
 ## Bedienung
