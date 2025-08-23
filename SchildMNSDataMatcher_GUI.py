@@ -278,7 +278,7 @@ class ReportApp(tk.Tk):
         
         # Info-Label
         info_label = tk.Label(help_window, text="Anleitung\n\n"+
-            "Aktuell gibt es nur das README.md ...")
+            "Aktuell gibt es nur das README.md - kann auch auf github gelesen werden ...")
         info_label.pack(pady=10)
         
         # Link-Label
@@ -286,7 +286,7 @@ class ReportApp(tk.Tk):
         link.pack()
 
         # Funktion zum Öffnen des Links
-        link.bind("<Button-1>", lambda e: webbrowser.open_new("https://github.com/PeterScholl/"))
+        link.bind("<Button-1>", lambda e: webbrowser.open_new("https://github.com/PeterScholl/aixExporterSchild3"))
 
         # Schließen-Button
         close_button = tk.Button(help_window, text="Schließen", command=help_window.destroy)
