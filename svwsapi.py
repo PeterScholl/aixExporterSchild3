@@ -10,10 +10,10 @@ from ssl import DER_cert_to_PEM_cert
 
 base_url = ""
 auth = ()
-verify = ""
+verify = True
 
 def download_server_cert(pem_path="server.pem"):
-    if not base_url: return
+    if not base_url: return None
     if not base_url.startswith("https://"):
         u = urlparse("https://"+base_url)
     else:
@@ -24,18 +24,36 @@ def download_server_cert(pem_path="server.pem"):
     port = u.port or 443
 
     #ctx = ssl.create_default_context()
-    
-    # Unverifizierter Context NUR zum Abholen des Zertifikats
-    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
+     # 1) Erst normal mit Prüfung verbinden
     try:
-        with socket.create_connection((host, port), timeout=10) as sock:
-            with ctx.wrap_socket(sock, server_hostname=host) as ssock:
-                der = ssock.getpeercert(binary_form=True)
-                pem = DER_cert_to_PEM_cert(der)
-        with open(pem_path, "w", encoding="utf-8") as f:
-            f.write(pem)
+        ctx = ssl.create_default_context()
+        with socket.create_connection((host, port), timeout=5) as sock:
+            with ctx.wrap_socket(sock, server_hostname=host):
+                pass
+        # Verbindung ok → Zertifikat gültig
+        return True
+    except ssl.SSLCertVerificationError as e:
+        if "self-signed certificate" not in str(e).lower():
+            return None
+        print(str(e).lower())
+        print("❗❗❗ ACHTUNG - Das Server Zertifkat wird heruntergeladen ❗❗❗")
+        
+        # Unverifizierter Context NUR zum Abholen des Zertifikats
+        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        try:
+            with socket.create_connection((host, port), timeout=10) as sock:
+                with ctx.wrap_socket(sock, server_hostname=host) as ssock:
+                    der = ssock.getpeercert(binary_form=True)
+                    pem = DER_cert_to_PEM_cert(der)
+            with open(pem_path, "w", encoding="utf-8") as f:
+                f.write(pem)
+            return pem_path
+        except Exception as e:
+            print(f"Fehler: {e}")
+            return None
+
     except ConnectionRefusedError as e:
         # WinError 10061 / Zielrechner verweigert
         raise RuntimeError(f"Verbindung verweigert ({host}:{port}). Läuft der Dienst?") from e
@@ -50,38 +68,44 @@ def download_server_cert(pem_path="server.pem"):
     except OSError as e:
         # Restliche OS-/Netzwerk-Fehler (z. B. Netzwerk unreachable)
         raise RuntimeError(f"Netzwerkfehler zu {host}:{port}: {e}.") from e
-    return pem_path
+    return None
 
 # Prüfen, ob server.pem existiert
 if os.path.exists("server.pem"):
     verify = "server.pem"
 else: 
     try: 
-        download_server_cert()
+        verify = download_server_cert()
     except RuntimeError as err:
         print(f"❗ {err}")  # oder messagebox.showerror("Fehler", str(err))
 
 
 def setConfig(url: str, auth_tuple: tuple):
-    global base_url, auth
+    print("Set svwsapi-config...", end="")
+    global base_url, auth, verify
     base_url = url
     auth = auth_tuple
     if os.path.exists("server.pem"):
         verify = "server.pem"
     else: 
-        print("❗❗❗ ACHTUNG - Das Server Zertifkat wird heruntergeladen ❗❗❗")
         try:
-            download_server_cert()
+            verify = download_server_cert()
         except RuntimeError as err:
             print(f"❗ {err}")  # oder messagebox.showerror("Fehler", str(err))
+    print(f"Verify Serverzertifikat: {verify}")
 
 
 # --- Methoden ---
 def gibIdSchuljahresabschnitt(jahr: int, abschnitt: int) -> int | None:
     """Holt die ID des Schuljahresabschnitts für angegebenes Jahr und Abschnitt"""
     url = f"{base_url}/schule/stammdaten"
-    response = requests.get(url, auth=auth, verify=verify)
-    response.raise_for_status()
+    print(f"Zertifikat zur Verifizierung: {verify} - existiert die Datei: {os.path.exists(str(verify))}")
+    try:
+        response = requests.get(url, auth=auth, verify=verify)
+        response.raise_for_status()
+    except Exception as e:
+        print(f"Error: {e}")
+        return None
     stammdaten = response.json()
 
     abschnitte = stammdaten.get("abschnitte", [])

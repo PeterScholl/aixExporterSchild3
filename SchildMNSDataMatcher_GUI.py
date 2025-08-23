@@ -80,8 +80,8 @@ class ReportApp(tk.Tk):
         button_texts = [
             "Verbindungseinstellung", "Abschnitts-ID holen", "Lerngruppen holen", "Statistik anzeigen", 
             "generateLookupDicts", "idsSchuelerZuLerngruppen", "TeamBezErstellen", "Referenz-IDs aus File", 
-            "ReferenzIDs aus SuS-Ids", "LehrerReferenzen aus File","Jahrgangsteams","TempHilfsfunktion",
-            "idsLerngruppenZuLehrern","idsKlassenleitungenZuLehrern","ErgänzeLehrerAusDB","b16",
+            "ReferenzIDs aus SuS-Ids", "LehrerReferenzen aus File","L-ReferenzIDs aus kuerzel", "Jahrgangsteams",
+            "idsLerngruppenZuLehrern","idsKlassenleitungenZuLehrern","ErgänzeLehrerAusDB","TempHilfsfunktion",
             "schueler_csv", "sus_extern_csv", "lehrer_csv", "ClearScreen",
             "ListeTeamBez","b22","b23","b24"
         ]
@@ -105,8 +105,10 @@ class ReportApp(tk.Tk):
                 self.generator.configValues(self)
                 self.report_text.insert(tk.END, "Konfiguration durchgeführt - Menu speichern?\n")
             case "Abschnitts-ID holen":
-                self.generator.initAbschnittsID()
-                self.report_text.insert(tk.END,f"Abschnitts-ID: {self.generator.svws_abschnitts_id}\n")
+                if (self.generator.initAbschnittsID()):
+                    self.report_text.insert(tk.END,f"Abschnitts-ID: {self.generator.svws_abschnitts_id}\n")
+                else:
+                    self.report_text.insert(tk.END,f"⚠️Nicht erfolgreich - evtl. Authentifizierung fehlerhaft (siehe Console)\n")
             case "Lerngruppen holen":
                 self.generator.lerngruppenHolen()
                 self.report_text.insert(tk.END,f"Lerngruppen geholt\n")
@@ -135,15 +137,22 @@ class ReportApp(tk.Tk):
                 self.tempHIlfsfunktion()
             case "ReferenzIDs aus SuS-Ids":
                 count = 0
-                for schueler in getattr(self.generator, "schueler", {}):
-                    if "id" in schueler:
+                for lehrer in getattr(self.generator, "schueler", {}):
+                    if "id" in lehrer:
                         count+=1
-                        schueler["referenzId"]=schueler.get("id")
+                        lehrer["referenzId"]=lehrer.get("id")
                 self.report_text.insert(tk.END,f'Bei {count} von {len(getattr(self.generator, "schueler", {}))} Schülern die ReferenzId-gesetzt\n')
             case "Referenz-IDs aus File":
                 self.report_text.insert(tk.END,self.generator.import_referenz_ids(self))     
             case "LehrerReferenzen aus File":
                 self.report_text.insert(tk.END,self.generator.import_referenz_ids(self,art="lehrer",idBez="kuerzel"))     
+            case "L-ReferenzIDs aus kuerzel":
+                count = 0
+                for lehrer in getattr(self.generator, "lehrer", {}):
+                    if "kuerzel" in lehrer:
+                        count+=1
+                        lehrer["referenzId"]=lehrer.get("kuerzel")
+                self.report_text.insert(tk.END,f'Bei {count} von {len(getattr(self.generator, "lehrer", {}))} Lehrern die ReferenzId-gesetzt\n')
             case "schueler_csv":
                 self.report_text.insert(tk.END, self.generator.writeSuSCSV())
             case "sus_extern_csv":

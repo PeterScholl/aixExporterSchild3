@@ -20,6 +20,7 @@ class Generator():
         self.svws_abschnitts_id = None
         self.kursarten_ohne_klasse = []
         self.lookupDict = {} # Dictionaries, die zur jeweiligen ID einen Verweis auf das zugehörige Objekt liefern
+        self.jahrgangsteams = {"Lehrer": ["*"]} #Sicherstellen, dass dieses Attribut existiert
         sv.setConfig(self.base_url, (self.username, self.password))
 
     def initAbschnittsID(self):
@@ -48,11 +49,12 @@ class Generator():
 
         result = show_config_gui(root, cfg)
         print("show config - end")
-        print(f"Result: {result}")
-        for key, value in result.items():
-            print(f"Key {key} erhält Value: {value}")
-            setattr(self, key, value)
-        sv.setConfig(self.base_url, (self.username, self.password))
+        if (result):
+            print(f"Result: {result}")
+            for key, value in result.items():
+                print(f"Key {key} erhält Value: {value}")
+                setattr(self, key, value)
+            sv.setConfig(self.base_url, (self.username, self.password))
 
     def lerngruppenHolen(self, keys = ["jahrgaenge","klassen","lehrer","faecher","lerngruppen", "schueler"]):
         sv.setConfig(self.base_url, (self.username, self.password))
@@ -349,7 +351,7 @@ class Generator():
         ergText = ""
         # Voraussetzungen prüfen (ReferenzID vorhanden, TeamsBez in den Lerngruppen)
         if not all("referenzId" in lehrer for lehrer in getattr(self,"lehrer",{})):
-            return "Keine Schüler vorhanden oder nicht alle haben eine referenzId\n"
+            return "Keine Lehrer vorhanden oder nicht alle haben eine referenzId\n"
         if not all("teamBez" in lerngruppe for lerngruppe in getattr(self,"lerngruppen",{})):
             return "Nicht alle Lerngruppen haben eine Teams-Bezeichnung (key: teamBez)\n"
         with open("Teacher.csv", mode="w", newline="", encoding="utf-8") as csvfile:

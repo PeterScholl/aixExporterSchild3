@@ -10,7 +10,7 @@ Exe-Datei herunterladen und starten - diese verbindet sich mit dem Nightly-Serve
 
 Einfach **SchildMNSDataMatcher_GUI.py** bzw die Exe starten.
 
-**WARNUNG** Das Serverzertifikat wird automatisch heruntergeladen, wenn es nicht existiert - ggf. die Datei ``server.pem`` prüfen.
+**WARNUNG** Das Serverzertifikat wird im falle eines self-signed Zertifikats automatisch heruntergeladen, wenn es nicht existiert - ggf. die Datei ``server.pem`` prüfen.
 
 Eine ``status.json`` - Datei wird automatisch angelegt. Wenn mal etwas nicht wie erwartet läuft, vielleicht auch mal in die Console schauen.
 
