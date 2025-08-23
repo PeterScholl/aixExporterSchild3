@@ -57,9 +57,20 @@ class ReportApp(tk.Tk):
         
         
         # Textbox für den Report
-        self.report_text = tk.Text(self, height=10, width=50)
-        self.report_text.pack(fill='both', expand=True, padx=10, pady=10)  # Rand von 10 Pixeln
-        #self.report_text.pack(pady=10)
+        frame = tk.Frame(self)
+        frame.pack(fill="both", expand=True, padx=10, pady=10)
+
+        # Textbox
+        self.report_text = tk.Text(frame, height=10, width=50, wrap="none")
+        self.report_text.pack(side="left", fill="both", expand=True)
+
+        # Scrollbar
+        scrollbar = tk.Scrollbar(frame, orient="vertical", command=self.report_text.yview)
+        scrollbar.pack(side="right", fill="y")
+
+        # Verknüpfen
+        self.report_text.config(yscrollcommand=scrollbar.set)
+
         
         # Frame für die Buttons
         button_frame = tk.Frame(self)
