@@ -33,7 +33,10 @@ Die Daten werden in der Datei status.json gespeichert. In der Datei finden sich 
 
 ### Verbindung zur Schild-Datenbank herstellen
 
-Dazu den Button Verbindungseinstellungen betätigen und insbesondere die Datenbankverbindungseinstellungen korrekt setzen. Ob dies erfolgreich war kann über den Button *Abschnitts-ID holen* geprüft werden. **Dabei wird auch die Datenbankverbindung (Authentifizierung) korrekt gesetzt** Dieser holt aus der Datenbank die ID des in der Verbindung eingestellten Lernabschnitts (z.B. 2025 Abschnitt 1). Rückmeldungen werden in der Regel in dem Textfeld des GUIs angezeigt.
+Dazu den Button Verbindungseinstellungen betätigen und insbesondere die Datenbankverbindungseinstellungen korrekt setzen. Ob dies erfolgreich war kann über den Button *Abschnitts-ID holen* geprüft werden.
+Falls es Schwierigkeiten mit der Authentifizierung des Zertifikats gibt, kann im Datei-Menü unter Einstellungen die Verifizierung des Zertifikates abgeschaltet werden oder mittels server.pem wird das Serverzertifkat (sofern nicht vorhanden) in die Datei server.pem heruntergeladen. Wenn es ein self-signed Zertifikat ist, funktioniert die Verifizierung ab dann.
+
+Dieser holt aus der Datenbank die ID des in der Verbindung eingestellten Lernabschnitts (z.B. 2025 Abschnitt 1). Rückmeldungen werden in der Regel in dem Textfeld des GUIs angezeigt.
 
 ### Lerngruppen holen
 

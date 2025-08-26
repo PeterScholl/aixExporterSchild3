@@ -45,10 +45,9 @@ class Generator():
         cfg["kursarten_ohne_klasse"] = self.kursarten_ohne_klasse if self.kursarten_ohne_klasse else ["AGGT","EGS1","FOGT"]
         cfg["kursarten_nur_mit_jahrgang"] = getattr(self,"kursarten_nur_mit_jahrgang", ["LK","GK","WPII","PUT"])
 
-        print("show config - start")
-
+       
         result = show_config_gui(root, cfg)
-        print("show config - end")
+       
         if (result):
             print(f"Result: {result}")
             for key, value in result.items():

@@ -70,29 +70,11 @@ def download_server_cert(pem_path="server.pem"):
         raise RuntimeError(f"Netzwerkfehler zu {host}:{port}: {e}.") from e
     return None
 
-# Prüfen, ob server.pem existiert
-if os.path.exists("server.pem"):
-    verify = "server.pem"
-else: 
-    try: 
-        verify = download_server_cert()
-    except RuntimeError as err:
-        print(f"❗ {err}")  # oder messagebox.showerror("Fehler", str(err))
-
-
 def setConfig(url: str, auth_tuple: tuple):
     print("Set svwsapi-config...", end="")
     global base_url, auth, verify
     base_url = url
     auth = auth_tuple
-    if os.path.exists("server.pem"):
-        verify = "server.pem"
-    else: 
-        try:
-            verify = download_server_cert()
-        except RuntimeError as err:
-            print(f"❗ {err}")  # oder messagebox.showerror("Fehler", str(err))
-    print(f"Verify Serverzertifikat: {verify}")
 
 
 # --- Methoden ---

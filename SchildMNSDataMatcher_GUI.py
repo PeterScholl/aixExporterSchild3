@@ -9,6 +9,7 @@ from tkinter import ttk, messagebox, filedialog
 
 
 # Define a mapping for special characters
+# TODO in mnspro Namen dürfen keine ' oder ` oder ? ...  vorkommen, diese sollten erstezt werden Unicode-Zeichen sind i.O.
 my_char_map = {
     'ć': 'c',
     'ç': 'c',
@@ -198,6 +199,8 @@ class ReportApp(tk.Tk):
 
     def load_state(self):
         self.generator = self.load_object_from_json(logic.Generator, "status.json")
+        print(f"username {self.generator.username}")
+        logic.sv.setConfig(self.generator.base_url,(self.generator.username, self.generator.password))
         self.report_text.insert(tk.END,"Konfiguration geladen!\n")
         
     def load_object_from_json(self, cls, filename):
@@ -304,9 +307,32 @@ class ReportApp(tk.Tk):
         ckButtonSonderzeichen.pack(anchor="w", padx=10, pady=5)
         ToolTip(ckButtonSonderzeichen, "Ersetzt einige Sonderzeichen nach einer festgelegten Tabelle")
 
-        # Schließen Button
-        tk.Button(settings_window, text="Schließen", command=settings_window.destroy).pack(pady=10)
-        
+        # Combobox für Verify
+        tk.Label(settings_window, text="Verify:").pack(anchor="w", padx=10, pady=(10,0))
+
+        #self.verify_var = tk.StringVar(value=str(self.cfg.get("verify", True)))
+        self.verify_var = tk.StringVar(value=str(logic.sv.verify))
+        cb_verify = ttk.Combobox(settings_window, textvariable=self.verify_var, state="readonly")
+        cb_verify["values"] = ("True", "False", "server.pem")
+        cb_verify.pack(fill="x", padx=10, pady=5)
+
+        ToolTip(cb_verify, "Legt fest, ob und wie SSL-Zertifikate geprüft werden")
+
+        # Schließen-Button
+        def on_close():
+            val = self.verify_var.get()
+            if val == "True":
+                logic.sv.verify = True
+            elif val == "False":
+                logic.sv.verify = False
+            else:
+                if os.path.exists("server.pem"):
+                    logic.sv.verify = "server.pem"
+                else: 
+                    logic.sv.verify = logic.sv.download_server_cert()
+            settings_window.destroy()
+
+        tk.Button(settings_window, text="Schließen", command=on_close).pack(pady=10)        
         # Let Tkinter calculate the required size
         settings_window.after(80, lambda: self.adjust_size(settings_window))
 
