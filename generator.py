@@ -2,11 +2,30 @@ import tkinter as tk
 from tkinter import filedialog, ttk, messagebox
 import csv
 import sys
+import os
 from collections import Counter
 from config_gui import load_config, show_config_gui
 import fetch
 import svwsapi as sv
 import config_gui
+
+
+# Define a mapping for special characters
+# TODO in mnspro Namen dürfen keine ' oder ` oder ? ...  vorkommen, diese sollten erstezt werden Unicode-Zeichen sind i.O.
+my_char_map = {
+    'ć': 'c',
+    'ç': 'c',
+    'Ç': 'C',
+    'é': 'e',
+    'è': 'e',
+    'ê': 'e',
+    'ñ': 'n',
+    '\'': '',
+    '´': '',
+    '?': '',
+    '.':''
+    # Add more mappings as needed
+}
 
 class Generator():
     def __init__(self):
@@ -21,7 +40,10 @@ class Generator():
         self.kursarten_ohne_klasse = []
         self.lookupDict = {} # Dictionaries, die zur jeweiligen ID einen Verweis auf das zugehörige Objekt liefern
         self.jahrgangsteams = {"Lehrer": ["*"]} #Sicherstellen, dass dieses Attribut existiert
+        self.replaceSpecialChars = True # Sonderzeichen in Gruppen oder Namen ersetzen
         sv.setConfig(self.base_url, (self.username, self.password))
+        if os.path.exists("server.pem"):
+            sv.verify="server.pem"
 
     def initAbschnittsID(self):
         sv.setConfig(self.base_url, (self.username, self.password))
@@ -56,7 +78,8 @@ class Generator():
             sv.setConfig(self.base_url, (self.username, self.password))
 
     def lerngruppenHolen(self, keys = ["jahrgaenge","klassen","lehrer","faecher","lerngruppen", "schueler"]):
-        sv.setConfig(self.base_url, (self.username, self.password))
+        self.initAbschnittsID()
+        #sv.setConfig(self.base_url, (self.username, self.password))
         lerngruppen_export = sv.gibLerngruppen(self.svws_abschnitts_id,1)
         for key, value in lerngruppen_export.items():
             if key in keys:
@@ -307,7 +330,10 @@ class Generator():
         with open(filename, mode="w", newline="", encoding="utf-8") as csvfile:
             writer = csv.writer(csvfile, delimiter=";")
             # Original Kopfzeile: ReferenzId;Vorname;Nachname;Klasse;Gruppen
-            writer.writerow(["ReferenzId", "Vorname", "Nachname", "Klasse", "Gruppen"])  # Kopfzeile
+            if (statusList != [2]):
+                writer.writerow(["ReferenzId", "Vorname", "Nachname", "Klassen", "Gruppen"])  # Kopfzeile
+            else:
+                writer.writerow(["ReferenzId", "Vorname", "Nachname", "Klasse", "Gruppen"])  # Kopfzeile
 
             count = 0
             lookup_lg = self.lookupDict.get("lerngruppen",{})
@@ -335,12 +361,17 @@ class Generator():
                             ergText+=f"Lerngruppe mit {lg_id} nicht gefunden\n"
                             continue
                         bezeichnung = lg.get("teamBez")
+                        if (self.replaceSpecialChars):
+                            bezeichnung = replace_chars(bezeichnung, my_char_map)
                         teams_liste.append(bezeichnung)
                 else:
                     ergText+=f"⚠️  {nachname}, {vorname} ({klasse}) hat keine Lerngruppe\n"
 
                 kurse = "|".join(teams_liste)
                 count += 1
+                if (self.replaceSpecialChars):
+                    nachname = replace_chars(nachname, my_char_map)
+                    vorname = replace_chars(vorname, my_char_map)
                 writer.writerow([referenzId, vorname, nachname, klasse, kurse])
 
         ergText+=(f"✅ CSV-Datei '{filename}' wurde mit {count} Einträgen erstellt.\n")
@@ -394,12 +425,18 @@ class Generator():
                             ergText+=f"Lerngruppe mit {klassen_id} nicht gefunden\n"
                             continue
                         bezeichnung = klasse.get("teamBez")
+                        if (self.replaceSpecialChars):
+                            bezeichnung = replace_chars(bezeichnung, my_char_map)
+
                         teams_liste.append(bezeichnung)
                 else:
                     ergText+=f"⚠️  {nachname}, {vorname} hat keine Lerngruppe\n"
 
                 kurse = "|".join(teams_liste)
                 count += 1
+                if (self.replaceSpecialChars):
+                    nachname = replace_chars(nachname, my_char_map)
+                    vorname = replace_chars(vorname, my_char_map)
                 writer.writerow([referenzId, vorname, nachname, klassen, kurse])
 
         ergText+=(f"✅ CSV-Datei 'Teacher.csv' wurde mit {count} Einträgen erstellt.\n")
@@ -583,6 +620,10 @@ class Generator():
         refresh_listbox()
         win.wait_window()
 
+def replace_chars(text: str, char_map: dict[str, str]) -> str:
+    for old, new in char_map.items():
+        text = text.replace(old, new)
+    return text
 
 
 if __name__=="__main__":

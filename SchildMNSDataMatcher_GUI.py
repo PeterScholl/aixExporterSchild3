@@ -8,18 +8,6 @@ import webbrowser
 from tkinter import ttk, messagebox, filedialog
 
 
-# Define a mapping for special characters
-# TODO in mnspro Namen dürfen keine ' oder ` oder ? ...  vorkommen, diese sollten erstezt werden Unicode-Zeichen sind i.O.
-my_char_map = {
-    'ć': 'c',
-    'ç': 'c',
-    'Ç': 'C',
-    'é': 'e',
-    'è': 'e',
-    'ê': 'e',
-    'ñ': 'n',
-    # Add more mappings as needed
-}
 
 class ToolTip:
     def __init__(self, widget, text):
@@ -79,10 +67,10 @@ class ReportApp(tk.Tk):
 
         # Die Buttons im Grid
         button_texts = [
-            "Verbindungseinstellung", "Abschnitts-ID holen", "Lerngruppen holen", "Statistik anzeigen", 
+            "Verbindungseinstellung", "Abschnitts-ID holen", "Lerngruppen holen", "ErgänzeLehrerAusDB", 
             "generateLookupDicts", "idsSchuelerZuLerngruppen", "TeamBezErstellen", "Referenz-IDs aus File", 
             "ReferenzIDs aus SuS-Ids", "LehrerReferenzen aus File","L-ReferenzIDs aus kuerzel", "Jahrgangsteams",
-            "idsLerngruppenZuLehrern","idsKlassenleitungenZuLehrern","ErgänzeLehrerAusDB","TempHilfsfunktion",
+            "idsLerngruppenZuLehrern","idsKlassenleitungenZuLehrern","Statistik anzeigen","TempHilfsfunktion",
             "schueler_csv", "sus_extern_csv", "lehrer_csv", "ClearScreen",
             "ListeTeamBez","b22","b23","b24"
         ]
@@ -201,7 +189,9 @@ class ReportApp(tk.Tk):
         self.generator = self.load_object_from_json(logic.Generator, "status.json")
         print(f"username {self.generator.username}")
         logic.sv.setConfig(self.generator.base_url,(self.generator.username, self.generator.password))
-        self.report_text.insert(tk.END,"Konfiguration geladen!\n")
+        self.report_text.insert(tk.END,"Konfiguration geladen!\nGeneriere Lookup Dictionaries ...")
+        self.generator.generateLookups()
+        self.report_text.insert(tk.END," DONE\n")
         
     def load_object_from_json(self, cls, filename):
         """Lädt ein Objekt einer bestimmten Klasse von einer JSON-Datei."""
@@ -303,7 +293,7 @@ class ReportApp(tk.Tk):
         #Geometry soll später dem Inhalt angepasst werden
         #settings_window.geometry("200x320")
         
-        ckButtonSonderzeichen = tk.Checkbutton(settings_window, text="Sonderzeichen ersetzen", variable=self.sonderzeichenErsetzen)
+        ckButtonSonderzeichen = tk.Checkbutton(settings_window, text="Sonderzeichen ersetzen", variable=self.generator.replaceSpecialChars)
         ckButtonSonderzeichen.pack(anchor="w", padx=10, pady=5)
         ToolTip(ckButtonSonderzeichen, "Ersetzt einige Sonderzeichen nach einer festgelegten Tabelle")
 
