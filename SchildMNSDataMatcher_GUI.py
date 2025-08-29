@@ -71,7 +71,7 @@ class ReportApp(tk.Tk):
             "Referenz-IDs aus File", "ReferenzIDs aus SuS-Ids", "LehrerReferenzen aus File","L-ReferenzIDs aus kuerzel", 
             "Jahrgangsteams", "idsLerngruppenZuLehrern","idsKlassenleitungenZuLehrern","TempHilfsfunktion",
             "schueler_csv", "sus_extern_csv", "lehrer_csv", "ClearScreen",
-            "ListeTeamBez","b22","b23","b24"
+            "ListeTeamBez","Übersicht Lernplattformen","b23","b24"
         ]
         
         # Buttons in einem <x> times 4 Grid
@@ -97,6 +97,14 @@ class ReportApp(tk.Tk):
                     self.report_text.insert(tk.END,f"Abschnitts-ID: {self.generator.svws_abschnitts_id}\n")
                 else:
                     self.report_text.insert(tk.END,f"⚠️Nicht erfolgreich - evtl. Authentifizierung fehlerhaft (siehe Console)\n")
+            case "Übersicht Lernplattformen":
+                response = logic.sv.gibLernplattformenUebersicht()
+                if (response):
+                    self.report_text.insert(tk.END,json.dumps(response, indent=2, ensure_ascii=False))
+                    self.report_text.insert(tk.END,"\n")
+                else:
+                    self.report_text.insert(tk.END,f"⚠️Nicht erfolgreich - evtl. keine Lerngruppen/fehlende Authentifizierung - siehe auch Console\n")
+                
             case "Lerngruppen holen":
                 if (self.generator.lerngruppenHolen()):
                     self.report_text.insert(tk.END,f"Lerngruppen geholt\n")

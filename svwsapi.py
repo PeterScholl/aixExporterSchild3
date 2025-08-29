@@ -216,6 +216,27 @@ def gibKlassen(abschnitt_id: int) -> list:
     response.raise_for_status()
     return response.json()
 
+def gibLernplattformenUebersicht() -> dict:
+    """Holt die Übersicht aller Lernplattformen in dem Schema"""
+    url = f"{base_url}/schule/lernplattformen"
+    response = requests.get(url, auth=auth, verify=verify)
+
+    if response.status_code == 403:
+        print("⚠️ Zugriff verweigert: Keine Rechte für Lernplattform-Export.")
+        return {}
+
+    if response.status_code == 404:
+        print("⚠️ Fehlende Daten für Lernplattform-Export (404).")
+        return {}
+    
+    if response.status_code == 503:
+        print("⚠️ Service noch nicht Verfügbar (503).")
+        return {}
+
+    response.raise_for_status()
+    return response.json()
+
+
 def gibLerngruppen(abschnitt_id: int, lernplattform_id: int) -> dict:
     """Holt den Datenexport für eine Lernplattform im angegebenen Abschnitt"""
     url = f"{base_url}/v1/lernplattformen/{lernplattform_id}/{abschnitt_id}"
