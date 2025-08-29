@@ -4,10 +4,9 @@ import os
 import tkinter as tk
 import generator as logic
 import webbrowser
-
 from tkinter import ttk, messagebox, filedialog
 
-
+# Exe erstellen mit: python -m PyInstaller --onefile .\SchildMNSDataMatcher_GUI.py
 
 class ToolTip:
     def __init__(self, widget, text):
@@ -67,10 +66,10 @@ class ReportApp(tk.Tk):
 
         # Die Buttons im Grid
         button_texts = [
-            "Verbindungseinstellung", "Abschnitts-ID holen", "Lerngruppen holen", "ErgänzeLehrerAusDB", 
-            "generateLookupDicts", "idsSchuelerZuLerngruppen", "TeamBezErstellen", "Referenz-IDs aus File", 
-            "ReferenzIDs aus SuS-Ids", "LehrerReferenzen aus File","L-ReferenzIDs aus kuerzel", "Jahrgangsteams",
-            "idsLerngruppenZuLehrern","idsKlassenleitungenZuLehrern","Statistik anzeigen","TempHilfsfunktion",
+            "Verbindungseinstellung", "Abschnitts-ID holen", "Lerngruppen holen","Statistik anzeigen", 
+            "ErgänzeLehrerAusDB", "generateLookupDicts", "idsSchuelerZuLerngruppen", "TeamBezErstellen", 
+            "Referenz-IDs aus File", "ReferenzIDs aus SuS-Ids", "LehrerReferenzen aus File","L-ReferenzIDs aus kuerzel", 
+            "Jahrgangsteams", "idsLerngruppenZuLehrern","idsKlassenleitungenZuLehrern","TempHilfsfunktion",
             "schueler_csv", "sus_extern_csv", "lehrer_csv", "ClearScreen",
             "ListeTeamBez","b22","b23","b24"
         ]
@@ -99,8 +98,10 @@ class ReportApp(tk.Tk):
                 else:
                     self.report_text.insert(tk.END,f"⚠️Nicht erfolgreich - evtl. Authentifizierung fehlerhaft (siehe Console)\n")
             case "Lerngruppen holen":
-                self.generator.lerngruppenHolen()
-                self.report_text.insert(tk.END,f"Lerngruppen geholt\n")
+                if (self.generator.lerngruppenHolen()):
+                    self.report_text.insert(tk.END,f"Lerngruppen geholt\n")
+                else:
+                    self.report_text.insert(tk.END,f"⚠️Nicht erfolgreich - evtl. keine Lerngruppen/fehlende Authentifizierung - siehe auch Console\n")
             case "ErgänzeLehrerAusDB":
                 self.report_text.insert(tk.END,self.generator.ergaenzeLehrer())
             case "Statistik anzeigen":

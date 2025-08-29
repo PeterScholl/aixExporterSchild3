@@ -85,6 +85,7 @@ class Generator():
             if key in keys:
                 print(f"Key von Lerngruppen wird übertragen: {key}")
                 setattr(self, key, value)
+        return lerngruppen_export
 
     def ergaenzeLehrer(self):
         """ ergänzt möglicherweise fehlende Lehrer aus der Datenbank """
