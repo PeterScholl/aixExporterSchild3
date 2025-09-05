@@ -239,7 +239,9 @@ def gibLernplattformenUebersicht() -> dict:
 
 def gibLerngruppen(abschnitt_id: int, lernplattform_id: int) -> dict:
     """Holt den Datenexport für eine Lernplattform im angegebenen Abschnitt"""
-    url = f"{base_url}/v1/lernplattformen/{lernplattform_id}/{abschnitt_id}"
+    #url = f"{base_url}/v1/lernplattformen/{lernplattform_id}/{abschnitt_id}"
+    url = f"{base_url.replace("/db", "/api/external")}/v1/lernplattformen/{lernplattform_id}/{abschnitt_id}"
+    print(f"Die URL für den API-Endpunkt: {url}")
     response = requests.get(url, auth=auth, verify=verify)
 
     if response.status_code == 403:
