@@ -4,7 +4,7 @@ import csv
 import sys
 import os
 from collections import Counter
-from config_gui import load_config, show_config_gui
+from config_gui import load_config, show_config_gui, show_noteam_gui
 import fetch
 import svwsapi as sv
 import config_gui
@@ -40,6 +40,7 @@ class Generator():
         self.kursarten_ohne_klasse = []
         self.lookupDict = {} # Dictionaries, die zur jeweiligen ID einen Verweis auf das zugehörige Objekt liefern
         self.jahrgangsteams = {"Lehrer": ["*"]} #Sicherstellen, dass dieses Attribut existiert
+        self.noTeams = [] #Liste von Teambezeichnungen, die nicht erstellt werden sollen
         self.replaceSpecialChars = True # Sonderzeichen in Gruppen oder Namen ersetzen
         sv.setConfig(self.base_url, (self.username, self.password))
         if os.path.exists("server.pem"):
@@ -55,7 +56,21 @@ class Generator():
         else:
             print("⚠️ Kein passender Schuljahresabschnitt gefunden!")
             return False
-        
+
+    def configNoTeams(self, root):
+        initial = {}
+        # Liste aller Teambezeichnungen aus den lerngruppen extrahieren
+        initial["alle"] = sorted(collect_values(getattr(self,"lerngruppen",[]),"teamBez")) 
+        initial["noTeams"] = self.noTeams
+
+        result = show_noteam_gui(root, initial)
+
+        if (result):
+            print(f"Result: {result}")
+            if (result != self.noTeams):
+                print(f"Update self.noTeams to {result}")
+                self.noTeams = result
+
     def configValues(self, root):
         cfg = {}
         cfg["schema"] = self.schema if self.schema else "GymAbiLite"
@@ -625,6 +640,13 @@ def replace_chars(text: str, char_map: dict[str, str]) -> str:
     for old, new in char_map.items():
         text = text.replace(old, new)
     return text
+
+def collect_values(objs, key, unique=True):
+    """Gibt alle vorkommenden Werte zu einem Key aus einer Liste von Dicts zurück."""
+    if unique:
+        return list({obj.get(key) for obj in objs if key in obj})
+    else: 
+        return [obj.get(key) for obj in objs if key in obj]
 
 
 if __name__=="__main__":

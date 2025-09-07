@@ -71,7 +71,7 @@ class ReportApp(tk.Tk):
             "Referenz-IDs aus File", "ReferenzIDs aus SuS-Ids", "LehrerReferenzen aus File","L-ReferenzIDs aus kuerzel", 
             "Jahrgangsteams", "idsLerngruppenZuLehrern","idsKlassenleitungenZuLehrern","TempHilfsfunktion",
             "schueler_csv", "sus_extern_csv", "lehrer_csv", "ClearScreen",
-            "ListeTeamBez","Übersicht Lernplattformen","b23","b24"
+            "ListeTeamBez","Übersicht Lernplattformen","Teams nicht erstellen","b24"
         ]
         
         # Buttons in einem <x> times 4 Grid
@@ -168,6 +168,9 @@ class ReportApp(tk.Tk):
                 ergtext += "\n".join(teambez)
                 ergtext += "\n"
                 self.report_text.insert(tk.END,ergtext)
+            case "Teams nicht erstellen":
+                self.generator.configNoTeams(self)
+                self.report_text.insert(tk.END, f"Nicht zu erstellende Teams gewählt: {len(self.generator.noTeams)}\n")
             case _:
                 print("Ubekannter Button")
 
@@ -366,8 +369,6 @@ class ReportApp(tk.Tk):
         ergText = f"In der Lergruppe {rnd_lg_bez} sind die folgenden Klassen {self.generator.get_kl_jg_zu_schuelerIDListe(rnd_lg.get("idsSchueler",[]))}\n"
         ergText += f"bzw. die folgenden Jahrgänge {self.generator.get_kl_jg_zu_schuelerIDListe(rnd_lg.get("idsSchueler",[]), art="jahrgaenge")}\n"
         self.report_text.insert(tk.END, ergText)
-
-
 
 def collect_values(objs, key, unique=True):
     """Gibt alle vorkommenden Werte zu einem Key aus einer Liste von Dicts zurück."""
