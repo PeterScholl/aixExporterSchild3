@@ -9,12 +9,19 @@ from tkinter import ttk, messagebox, filedialog
 # Exe erstellen mit: python -m PyInstaller --onefile .\SchildMNSDataMatcher_GUI.py
 
 class ToolTip:
-    def __init__(self, widget, text):
+    def __init__(self, widget, text, delay = 500):
         self.widget = widget
         self.text = text
+        self.delay = delay  # Millisekunden
         self.tooltip = None
-        widget.bind("<Enter>", self.show_tooltip)
-        widget.bind("<Leave>", self.hide_tooltip)
+        self.after_id = None
+
+        widget.bind("<Enter>", self.schedule_show)
+        widget.bind("<Leave>", self.cancel_tooltip)
+
+    def schedule_show(self, event):
+        self.cancel_tooltip()
+        self.after_id = self.widget.after(self.delay, lambda: self.show_tooltip(event))
 
     def show_tooltip(self, event):
         # Tooltip Fenster erstellen
@@ -24,7 +31,10 @@ class ToolTip:
         label = tk.Label(self.tooltip, text=self.text, background="lightgrey", relief="solid", borderwidth=1)
         label.pack()
 
-    def hide_tooltip(self, event):
+    def cancel_tooltip(self, event=None):
+        if self.after_id:
+            self.widget.after_cancel(self.after_id)
+            self.after_id = None
         if self.tooltip:
             self.tooltip.destroy()
             self.tooltip = None
@@ -73,12 +83,18 @@ class ReportApp(tk.Tk):
             "schueler_csv", "sus_extern_csv", "lehrer_csv", "ClearScreen",
             "ListeTeamBez","Übersicht Lernplattformen","Teams nicht erstellen","b24"
         ]
+
+        tooltip = {
+            "Teams nicht erstellen": "Auswahl von Teams\naus der aktuellen Liste TeamsBez\ndie nicht erstellt werden\nsollen"
+        }
         
         # Buttons in einem <x> times 4 Grid
         for i, text in enumerate(button_texts):
             button = tk.Button(button_frame, text=text, command=lambda t=text: self.button_clicked(t))
             button.grid(row=i//4, column=i%4, padx=5, pady=5)  # Grid positionierung
-            
+            if (text in tooltip):
+                ToolTip(button, tooltip[text])
+
         # Einstellungen speichern
         self.sonderzeichenErsetzen = tk.BooleanVar(value=True) #Ersetzt Sonderzeichen aus der Charmap
 
@@ -104,14 +120,16 @@ class ReportApp(tk.Tk):
                     self.report_text.insert(tk.END,"\n")
                 else:
                     self.report_text.insert(tk.END,f"⚠️Nicht erfolgreich - evtl. keine Lerngruppen/fehlende Authentifizierung - siehe auch Console\n")
-                
+                self.report_text.see(tk.END)
             case "Lerngruppen holen":
                 if (self.generator.lerngruppenHolen()):
                     self.report_text.insert(tk.END,f"Lerngruppen geholt\n")
                 else:
                     self.report_text.insert(tk.END,f"⚠️Nicht erfolgreich - evtl. keine Lerngruppen/fehlende Authentifizierung - siehe auch Console\n")
+                self.report_text.see(tk.END)
             case "ErgänzeLehrerAusDB":
                 self.report_text.insert(tk.END,self.generator.ergaenzeLehrer())
+                self.report_text.see(tk.END)
             case "Statistik anzeigen":
                 self.show_statistik()
             case "generateLookupDicts":
@@ -120,19 +138,25 @@ class ReportApp(tk.Tk):
                 for key, value in self.generator.lookupDict.items():
                     ergtext+=f"Einträge für den key {key}: {len(value)}\n"
                 self.report_text.insert(tk.END,ergtext)
+                self.report_text.see(tk.END)
             case "idsKlassenleitungenZuLehrern":
                 anz = self.generator.addKlassenleitungsIdsZuLuL()
                 self.report_text.insert(tk.END,f"Es wurden {anz} Verknüpfungen erstellt\n")
+                self.report_text.see(tk.END)
             case "idsLerngruppenZuLehrern":
                 anz = self.generator.addLerngruppenIdsZuLuL()
                 self.report_text.insert(tk.END,f"Es wurden {anz} Verknüpfungen erstellt\n")
+                self.report_text.see(tk.END)
             case "idsSchuelerZuLerngruppen":
                 anz = self.generator.addSuSIdsZuLerngruppen()
                 self.report_text.insert(tk.END,f"Es wurden {anz} Verknüpfungen erstellt\n")
+                self.report_text.see(tk.END)
             case "TeamBezErstellen":
                 self.report_text.insert(tk.END, self.generator.addTeamBezZuLerngruppen())
+                self.report_text.see(tk.END)
             case "TempHilfsfunktion":
                 self.tempHIlfsfunktion()
+                self.report_text.see(tk.END)
             case "ReferenzIDs aus SuS-Ids":
                 count = 0
                 for lehrer in getattr(self.generator, "schueler", {}):
@@ -140,10 +164,13 @@ class ReportApp(tk.Tk):
                         count+=1
                         lehrer["referenzId"]=lehrer.get("id")
                 self.report_text.insert(tk.END,f'Bei {count} von {len(getattr(self.generator, "schueler", {}))} Schülern die ReferenzId-gesetzt\n')
+                self.report_text.see(tk.END)
             case "Referenz-IDs aus File":
                 self.report_text.insert(tk.END,self.generator.import_referenz_ids(self))     
+                self.report_text.see(tk.END)
             case "LehrerReferenzen aus File":
                 self.report_text.insert(tk.END,self.generator.import_referenz_ids(self,art="lehrer",idBez="kuerzel"))     
+                self.report_text.see(tk.END)
             case "L-ReferenzIDs aus kuerzel":
                 count = 0
                 for lehrer in getattr(self.generator, "lehrer", {}):
@@ -151,13 +178,17 @@ class ReportApp(tk.Tk):
                         count+=1
                         lehrer["referenzId"]=lehrer.get("kuerzel")
                 self.report_text.insert(tk.END,f'Bei {count} von {len(getattr(self.generator, "lehrer", {}))} Lehrern die ReferenzId-gesetzt\n')
+                self.report_text.see(tk.END)
             case "schueler_csv":
                 self.report_text.insert(tk.END, self.generator.writeSuSCSV())
+                self.report_text.see(tk.END)
             case "sus_extern_csv":
                 self.report_text.insert(tk.END, "Externe Schüler mit Status 6:\n")
                 self.report_text.insert(tk.END, self.generator.writeSuSCSV(statusList=[6], filename="StudentExternal.csv"))
+                self.report_text.see(tk.END)
             case "lehrer_csv":
                 self.report_text.insert(tk.END, self.generator.writeLuLCSV())
+                self.report_text.see(tk.END)
             case "Jahrgangsteams":
                 self.generator.edit_jahrgangsteams(self)
             case "ClearScreen":
@@ -168,6 +199,7 @@ class ReportApp(tk.Tk):
                 ergtext += "\n".join(teambez)
                 ergtext += "\n"
                 self.report_text.insert(tk.END,ergtext)
+                self.report_text.see(tk.END)
             case "Teams nicht erstellen":
                 self.generator.configNoTeams(self)
                 self.report_text.insert(tk.END, f"Nicht zu erstellende Teams gewählt: {len(self.generator.noTeams)}\n")
@@ -340,7 +372,7 @@ class ReportApp(tk.Tk):
 
     def show_statistik(self):
         report = "Anzahlen der Einträge in den verschiedenen Keys:\n"
-        for key in ["jahrgaenge","klassen","lehrer","faecher","lerngruppen", "schueler"]:
+        for key in ["jahrgaenge","klassen","lehrer","faecher","lerngruppen", "schueler","noTeams"]:
             report += f"{key}: {len(getattr(self.generator,key,[]))}\n"
         
         # Zufällige Elemente aus den wichtigsten listen anzeigen

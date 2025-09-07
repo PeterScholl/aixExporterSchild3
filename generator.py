@@ -338,6 +338,7 @@ class Generator():
     
     def writeSuSCSV(self, statusList = [2], filename="Student.csv"): # Status 2 - aktiv, 6 - extern
         ergText = ""
+        countNoTeams = 0
         # Voraussetzungen prüfen (ReferenzID vorhanden, TeamsBez in den Lerngruppen)
         if not all("referenzId" in schueler for schueler in getattr(self,"schueler",{})):
             return "Keine Schüler vorhanden oder nicht alle haben eine referenzId\n"
@@ -377,9 +378,12 @@ class Generator():
                             ergText+=f"Lerngruppe mit {lg_id} nicht gefunden\n"
                             continue
                         bezeichnung = lg.get("teamBez")
-                        if (self.replaceSpecialChars):
-                            bezeichnung = replace_chars(bezeichnung, my_char_map)
-                        teams_liste.append(bezeichnung)
+                        if (bezeichnung not in self.noTeams):
+                            if (self.replaceSpecialChars):
+                                bezeichnung = replace_chars(bezeichnung, my_char_map)
+                            teams_liste.append(bezeichnung)
+                        else:
+                            countNoTeams+=1
                 else:
                     ergText+=f"⚠️  {nachname}, {vorname} ({klasse}) hat keine Lerngruppe\n"
 
@@ -389,12 +393,13 @@ class Generator():
                     nachname = replace_chars(nachname, my_char_map)
                     vorname = replace_chars(vorname, my_char_map)
                 writer.writerow([referenzId, vorname, nachname, klasse, kurse])
-
+        if countNoTeams > 0: ergText+=(f"ℹ️ Es wurden {countNoTeams} Verknüpfungen wegen nicht zu erstellender Teams verhindert\n")
         ergText+=(f"✅ CSV-Datei '{filename}' wurde mit {count} Einträgen erstellt.\n")
         return ergText
 
     def writeLuLCSV(self):
         ergText = ""
+        countNoTeams = 0
         # Voraussetzungen prüfen (ReferenzID vorhanden, TeamsBez in den Lerngruppen)
         if not all("referenzId" in lehrer for lehrer in getattr(self,"lehrer",{})):
             return "Keine Lehrer vorhanden oder nicht alle haben eine referenzId\n"
@@ -441,10 +446,13 @@ class Generator():
                             ergText+=f"Lerngruppe mit {klassen_id} nicht gefunden\n"
                             continue
                         bezeichnung = klasse.get("teamBez")
-                        if (self.replaceSpecialChars):
-                            bezeichnung = replace_chars(bezeichnung, my_char_map)
+                        if (bezeichnung not in self.noTeams):
+                            if (self.replaceSpecialChars):
+                                bezeichnung = replace_chars(bezeichnung, my_char_map)
 
-                        teams_liste.append(bezeichnung)
+                            teams_liste.append(bezeichnung)
+                        else:
+                            countNoTeams += 1
                 else:
                     ergText+=f"⚠️  {nachname}, {vorname} hat keine Lerngruppe\n"
 
@@ -455,6 +463,7 @@ class Generator():
                     vorname = replace_chars(vorname, my_char_map)
                 writer.writerow([referenzId, vorname, nachname, klassen, kurse])
 
+        if countNoTeams > 0: ergText+=(f"ℹ️ Es wurden {countNoTeams} Verknüpfungen wegen nicht zu erstellender Teams verhindert\n")
         ergText+=(f"✅ CSV-Datei 'Teacher.csv' wurde mit {count} Einträgen erstellt.\n")
         return ergText
 
