@@ -77,15 +77,17 @@ class ReportApp(tk.Tk):
         # Die Buttons im Grid
         button_texts = [
             "Verbindungseinstellung", "Abschnitts-ID holen", "Lerngruppen holen","Statistik anzeigen", 
-            "ErgänzeLehrerAusDB", "generateLookupDicts", "idsSchuelerZuLerngruppen", "TeamBezErstellen", 
+            "Serverzertifikat laden", "generateLookupDicts", "idsSchuelerZuLerngruppen", "TeamBezErstellen", 
             "Referenz-IDs aus File", "ReferenzIDs aus SuS-Ids", "LehrerReferenzen aus File","L-ReferenzIDs aus kuerzel", 
-            "Jahrgangsteams", "idsLerngruppenZuLehrern","idsKlassenleitungenZuLehrern","TempHilfsfunktion",
+            "Jahrgangsteams", "idsLerngruppenZuLehrern","idsKlassenleitungenZuLehrern","Teams nicht erstellen",
             "schueler_csv", "sus_extern_csv", "lehrer_csv", "ClearScreen",
-            "ListeTeamBez","Übersicht Lernplattformen","Teams nicht erstellen","b24"
+            "ListeTeamBez","Übersicht Lernplattformen","TempHilfsfunktion","ErgänzeLehrerAusDB"
         ]
 
         tooltip = {
-            "Teams nicht erstellen": "Auswahl von Teams\naus der aktuellen Liste TeamsBez\ndie nicht erstellt werden\nsollen"
+            "Teams nicht erstellen": "Auswahl von Teams\naus der aktuellen Liste TeamsBez\ndie nicht erstellt werden\nsollen",
+            "Serverzertifikat laden": "Lädt ein selbstsigniertes\nZertifikat herunter und\nspeichert es in ./server.pem",
+            "ErgänzeLehrerAusDB": "Veraltet - holt ggf.\nfehlende Lehrer über\neinen alternativen\nAPI-Endpunkt"
         }
         
         # Buttons in einem <x> times 4 Grid
@@ -203,6 +205,16 @@ class ReportApp(tk.Tk):
             case "Teams nicht erstellen":
                 self.generator.configNoTeams(self)
                 self.report_text.insert(tk.END, f"Nicht zu erstellende Teams gewählt: {len(self.generator.noTeams)}\n")
+            case "Serverzertifikat laden":
+                result = logic.sv.download_server_cert()
+                if (result==True):
+                    self.report_text.insert(tk.END,"ℹ️ Zertifikatskette - muss und wird nicht heruntergeladen\n")
+                elif (result=="server.pem"):
+                    logic.sv.verify = result
+                    self.report_text.insert(tk.END,"ℹ️ Zertifikatsdatei in server.pem gespeichert und aktiviert\n")
+                else:
+                    self.report_text.insert(tk.END,"⚠️ Fehler beim Download - siehe Console\n")
+                self.report_text.see(tk.END)
             case _:
                 print("Ubekannter Button")
 
@@ -337,7 +349,8 @@ class ReportApp(tk.Tk):
         #Geometry soll später dem Inhalt angepasst werden
         #settings_window.geometry("200x320")
         
-        ckButtonSonderzeichen = tk.Checkbutton(settings_window, text="Sonderzeichen ersetzen", variable=self.generator.replaceSpecialChars)
+        boolReplaceSpecialChars = tk.BooleanVar(value=self.generator.replaceSpecialChars)
+        ckButtonSonderzeichen = tk.Checkbutton(settings_window, text="Sonderzeichen ersetzen", variable=boolReplaceSpecialChars)
         ckButtonSonderzeichen.pack(anchor="w", padx=10, pady=5)
         ToolTip(ckButtonSonderzeichen, "Ersetzt einige Sonderzeichen nach einer festgelegten Tabelle")
 
@@ -364,6 +377,7 @@ class ReportApp(tk.Tk):
                     logic.sv.verify = "server.pem"
                 else: 
                     logic.sv.verify = logic.sv.download_server_cert()
+            self.generator.replaceSpecialChars = boolReplaceSpecialChars.get()
             settings_window.destroy()
 
         tk.Button(settings_window, text="Schließen", command=on_close).pack(pady=10)        
