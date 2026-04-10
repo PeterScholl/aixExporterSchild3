@@ -42,6 +42,7 @@ Dieser holt aus der Datenbank die ID des in der Verbindung eingestellten Lernabs
 
 Wenn die Verbindung steht sollten die Lerngruppen geholt werden. Das Programm nutzt dazu die api (Swagger-UI, ...) von Schild3 (Getestet mit Version 1.10 des SVWS-Servers)
 Mit Statistik anzeigen erhält man einen Überblick über das was so an Daten geholt worden ist. Es werden auch aus den wichtigsten Objekten zufällige Elemente angezeigt.
+*Aktuell wird automatisch die Lernplattform-ID 1 (lms.logineo) verwendet*
 
 ### Kontrolle des aktuellen Datenbestandes mit Statistik anzeigen
 

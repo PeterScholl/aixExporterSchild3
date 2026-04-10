@@ -81,11 +81,25 @@ class ReportApp(tk.Tk):
             "Referenz-IDs aus File", "ReferenzIDs aus SuS-Ids", "LehrerReferenzen aus File","L-ReferenzIDs aus kuerzel", 
             "Jahrgangsteams", "idsLerngruppenZuLehrern","idsKlassenleitungenZuLehrern","Teams nicht erstellen",
             "schueler_csv", "sus_extern_csv", "lehrer_csv", "ClearScreen",
+            "show_objekt_by_id", "-ohne Funktion-", "-ohne Funktion-", "-ohne Funktion-",
             "ListeTeamBez","Übersicht Lernplattformen","TempHilfsfunktion","ErgänzeLehrerAusDB"
         ]
 
         tooltip = {
+            "Abschnitts-ID holen": "Holt die Datenbank ID des LernAbschnitts\nErster Test der Verbindung und Authentifizierung\nevtl. Fehlermeldung in der Console",
+            "Lerngruppen holen": "Hauptfunktion\nHolt die Lerngruppen - aktuell lms.logineo\nLehrer- und Schülerzuordnung",
+            "Statistik anzeigen": "Zeigt die Anzahl der Einträge in den verschiedenen Listen an\nund gibt zufällige Beispiele aus",
+            "generateLookupDicts": "Erstellt Hilfs-Dictionaries für schnelleren Zugriff\nz.B. um von SchülerID auf Klasse oder Jahrgang zu kommen",
+            "idsSchuelerZuLerngruppen": "Füllt die Lerngruppen mit den zugehörigen Schüler-IDs",
+            "teamBezErstellen": "Erstellt die TeamBezeichnung für die Lerngruppen\nz.B. 5a - D oder EF - M-GK1 oder AG Informatik",
+            "Jahrgangsteams": "Funktion zum Erstellen von Jahrgangsteams\nz.B. für die EF ein Team mit Namen Abi2028",
+            "idsLerngruppenZuLehrern": "Füllt die Lehrer mit den zugeordneten Lerngruppen-IDs",
+            "idsKlassenleitungenZuLehrern": "Füllt die Lehrer mit den zugeordneten Klassenleitungs-IDs",
             "Teams nicht erstellen": "Auswahl von Teams\naus der aktuellen Liste TeamsBez\ndie nicht erstellt werden\nsollen",
+            "schueler_csv": "Erstellt die schueler.csv-Datei zum import in MNSpro",
+            "schueler_extern_csv": "Erstellt die schueler.csv-Datei mit\nexternen Schülern (Status 6)\nzum import in MNSpro",
+            "lehrer_csv": "Erstellt die lehrer.csv-Datei zum import in MNSpro",
+            "show_objekt_by_id": "Dialog zum Suchen und Anzeigen eines Objekts anhand von Typ und ID\nz.B. Schüler mit id=1234",
             "Serverzertifikat laden": "Lädt ein selbstsigniertes\nZertifikat herunter und\nspeichert es in ./server.pem",
             "ErgänzeLehrerAusDB": "Veraltet - holt ggf.\nfehlende Lehrer über\neinen alternativen\nAPI-Endpunkt"
         }
@@ -134,6 +148,8 @@ class ReportApp(tk.Tk):
                 self.report_text.see(tk.END)
             case "Statistik anzeigen":
                 self.show_statistik()
+            case "show_objekt_by_id":
+                self.show_objekt_by_id()
             case "generateLookupDicts":
                 self.generator.generateLookups()
                 ergtext = "Erstellte Lookup-Dictionaries:\n"
@@ -388,6 +404,8 @@ class ReportApp(tk.Tk):
         report = "Anzahlen der Einträge in den verschiedenen Keys:\n"
         for key in ["jahrgaenge","klassen","lehrer","faecher","lerngruppen", "schueler","noTeams"]:
             report += f"{key}: {len(getattr(self.generator,key,[]))}\n"
+
+        report += "noTeams sind bewußt nicht erzeugte Teams (Button Teams nicht erstellen)\n"
         
         # Zufällige Elemente aus den wichtigsten listen anzeigen
         for listenname in ["schueler","lerngruppen","lehrer"]:
@@ -402,6 +420,92 @@ class ReportApp(tk.Tk):
         self.report_text.delete(1.0, tk.END)
         self.report_text.insert(tk.END, report)
 
+    def show_objekt_by_id(self):
+        """Dialog zum Suchen und Anzeigen eines Objekts anhand von Typ und ID."""
+        
+        typen = ["jahrgaenge", "klassen", "lehrer", "faecher", "lerngruppen", "schueler"]
+        
+        # --- Toplevel-Dialog erstellen ---
+        win = tk.Toplevel()
+        win.title("Objekt nach ID suchen")
+        win.resizable(True, True)
+        win.columnconfigure(0, weight=1)
+        win.columnconfigure(1, weight=1)
+        win.rowconfigure(3, weight=1)  # Zeile mit dem Textfeld wächst
+
+        # Typ-Auswahl
+        tk.Label(win, text="Typ:").grid(row=0, column=0, sticky="w", padx=8, pady=6)
+        cb_typ = ttk.Combobox(win, values=typen, state="readonly", width=20)
+        cb_typ.current(0)
+        cb_typ.grid(row=0, column=1, padx=8, pady=6)
+
+        # ID-Eingabe
+        tk.Label(win, text="ID:").grid(row=1, column=0, sticky="w", padx=8, pady=6)
+        entry_id = ttk.Entry(win, width=22)
+        entry_id.grid(row=1, column=1, padx=8, pady=6)
+        entry_id.focus()
+
+        # Ergebnis-Textfeld
+        result_frame = tk.Frame(win)
+        result_frame.grid(row=3, column=0, columnspan=2, padx=8, pady=6, sticky="nsew")
+        
+        scrollbar = tk.Scrollbar(result_frame)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        result_text = tk.Text(
+            result_frame,
+            width=60,
+            height=20,
+            yscrollcommand=scrollbar.set,
+            wrap=tk.NONE
+        )
+        result_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.config(command=result_text.yview)
+
+        # --- Suchfunktion ---
+        def suchen():
+            typ = cb_typ.get()
+            id_eingabe = entry_id.get().strip()
+
+            result_text.delete(1.0, tk.END)
+
+            if not id_eingabe:
+                result_text.insert(tk.END, "Bitte eine ID eingeben.")
+                return
+
+            # ID als int oder string versuchen
+            try:
+                id_val = int(id_eingabe)
+            except ValueError:
+                id_val = id_eingabe
+
+            liste = getattr(self.generator, typ, [])
+
+            # Suche nach "id"-Feld im Objekt – flexibel: int oder str vergleichen
+            treffer = [
+                obj for obj in liste
+                if obj.get("id") == id_val or str(obj.get("id", "")) == str(id_eingabe)
+            ]
+
+            if not treffer:
+                result_text.insert(tk.END, f'Kein Eintrag in "{typ}" mit id={id_eingabe} gefunden.')
+            else:
+                for obj in treffer:
+                    result_text.insert(tk.END, json.dumps(obj, indent=2, ensure_ascii=False))
+                    result_text.insert(tk.END, "\n")
+
+        # Suche auch per Enter auslösen
+        entry_id.bind("<Return>", lambda e: suchen())
+
+        # Buttons
+        btn_frame = tk.Frame(win)
+        btn_frame.grid(row=2, column=0, columnspan=2, pady=4)
+        ttk.Button(btn_frame, text="Suchen", command=suchen).pack(side=tk.LEFT, padx=6)
+        ttk.Button(btn_frame, text="Schließen", command=win.destroy).pack(side=tk.LEFT, padx=6)
+
+        win.grab_set()
+        win.wait_window()
+
     def tempHIlfsfunktion(self):
         res = collect_values(getattr(self.generator,"lerngruppen",[]),"kursartKuerzel")
         self.report_text.insert(tk.END,f"Es gibt folgende kursartKuerzel: {res}\n")
@@ -412,8 +516,8 @@ class ReportApp(tk.Tk):
         # Klassen der Schüler einer zufälligen Lerngruppe ausgeben
         rnd_lg = random.choice(getattr(self.generator, "lerngruppen", [-1]))
         rnd_lg_bez = rnd_lg.get("teamBez", rnd_lg.get("bezeichnung", "---"))
-        ergText = f"In der Lergruppe {rnd_lg_bez} sind die folgenden Klassen {self.generator.get_kl_jg_zu_schuelerIDListe(rnd_lg.get("idsSchueler",[]))}\n"
-        ergText += f"bzw. die folgenden Jahrgänge {self.generator.get_kl_jg_zu_schuelerIDListe(rnd_lg.get("idsSchueler",[]), art="jahrgaenge")}\n"
+        ergText = f"In der Lergruppe {rnd_lg_bez} sind die folgenden Klassen {self.generator.get_kl_jg_zu_schuelerIDListe(rnd_lg.get('idsSchueler',[]))}\n"
+        ergText += f"bzw. die folgenden Jahrgänge {self.generator.get_kl_jg_zu_schuelerIDListe(rnd_lg.get('idsSchueler',[]), art='jahrgaenge')}\n"
         self.report_text.insert(tk.END, ergText)
 
 def collect_values(objs, key, unique=True):
