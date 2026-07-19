@@ -173,6 +173,12 @@ class Generator():
             count += 1
 
         ergText += f"✅ Es wurden {count} zusätzliche Schüler geladen (Status {statusList})\n"
+        if count > 0:
+            ergText += ("⚠️ ACHTUNG: Diese Schüler wurden direkt aus der Datenbank ergänzt und NICHT über den\n"
+                        "⚠️ Lernplattform-Export der Lerngruppen geholt. Dabei wird NICHT geprüft, ob eine Zustimmung\n"
+                        "⚠️ zum Export in die Lernplattform vorliegt! Bitte vor dem Export unbedingt in Schild3 prüfen,\n"
+                        "⚠️ welche der ergänzten Schüler exportiert werden dürfen, und ggf. nicht zustimmende Schüler\n"
+                        "⚠️ wieder entfernen.\n")
         if countStatus > 0:
             ergText += f"ℹ️ {countStatus} Schüler wurden wegen ihres Status übersprungen\n"
         return ergText
