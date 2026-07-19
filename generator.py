@@ -34,6 +34,16 @@ def _all_have(objs, key):
     return bool(objs) and all(key in o for o in objs)
 
 
+def _teambez_ok(lg):
+    """True, wenn die Lerngruppe eine teamBez hat, oder das Fehlen ausschließlich daran liegt,
+    dass ihr (noch) keine Schüler zugeordnet sind - z.B. Kurse ohne Kurswahl am Schuljahresanfang.
+    Andere Ursachen (fehlende Bezeichnung/Kursartkürzel) deuten auf echte Datenprobleme hin und
+    gelten weiterhin als nicht erledigt."""
+    if "teamBez" in lg:
+        return True
+    return "kursartKuerzel" in lg and lg.get("bezeichnung") is not None and not lg.get("idsSchueler")
+
+
 class WorkflowStep(Enum):
     """Benannte Zustände des Pflicht-Workflows (in der vorgesehenen Reihenfolge)."""
     ABSCHNITT_VERBUNDEN = "Abschnitts-ID geholt"
@@ -70,7 +80,7 @@ class Generator():
         (WorkflowStep.SCHUELER_ZU_LERNGRUPPEN, ["idsSchuelerZuLerngruppen"],
             lambda g: _all_have(getattr(g, "lerngruppen", []), "idsSchueler")),
         (WorkflowStep.TEAMBEZ_ERSTELLT, ["TeamBezErstellen"],
-            lambda g: _all_have(getattr(g, "lerngruppen", []), "teamBez")),
+            lambda g: bool(getattr(g, "lerngruppen", [])) and all(_teambez_ok(lg) for lg in g.lerngruppen)),
         (WorkflowStep.REFERENZ_IDS_SCHUELER, ["Referenz-IDs aus File", "ReferenzIDs aus SuS-Ids"],
             lambda g: _all_have(getattr(g, "schueler", []), "referenzId")),
         (WorkflowStep.LERNGRUPPEN_ZU_LEHRERN, ["idsLerngruppenZuLehrern"],
