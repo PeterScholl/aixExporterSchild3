@@ -133,6 +133,50 @@ class Generator():
                     print(f"Achtung: Lehrer-ID {lid} nicht im Export gefunden.")
         return ergText
 
+    def ergaenzeSchueler(self, statusList=[2, 6]):
+        """ ergänzt fehlende Schüler aus der Datenbank (z.B. Schuljahresanfang, noch keiner Lerngruppe zugeordnet)
+        statusList schränkt ein, welche Schüler-Status übernommen werden (2 - aktiv, 6 - extern) """
+        ergText = ""
+
+        # sicherstellen, dass eine Abschnitts-ID vorhanden ist
+        if not self.svws_abschnitts_id:
+            ergText += "Abschnitts-ID war noch nicht vorhanden, wird geholt\n"
+            self.initAbschnittsID()
+        if not self.svws_abschnitts_id:
+            ergText += "⚠️ FEHLER: Es konnte keine Abschnitts-ID ermittelt werden\n"
+            return ergText
+
+        schueler_export = sv.gibSchuelerListe(self.svws_abschnitts_id)
+        ergText += f"Es gibt {len(schueler_export)} Schüler in der Datenbank für den Abschnitt\n"
+
+        # sicherstellen, dass Strukturen existieren
+        if not hasattr(self, "schueler"):
+            ergText += "Die Schülerdaten waren noch gar nicht vorhanden\n"
+            self.schueler = []
+        if "schueler" not in self.lookupDict:
+            ergText += "LookupDicts müssen noch erstellt werden\n"
+            self.generateLookups()
+
+        # alle Schüler aus der Datenbank durchgehen (auch die ohne Lerngruppe)
+        count = 0
+        countStatus = 0
+        for s in schueler_export:
+            sid = s.get("id")
+            if sid in self.lookupDict["schueler"]:
+                continue
+            if s.get("status") not in statusList:
+                countStatus += 1
+                continue
+            ergText += f'Schüler {s.get("nachname","?")}, {s.get("vorname","?")} mit id {sid} wird übernommen\n'
+            self.lookupDict["schueler"][sid] = s
+            self.schueler.append(s)
+            count += 1
+
+        ergText += f"✅ Es wurden {count} zusätzliche Schüler geladen (Status {statusList})\n"
+        if countStatus > 0:
+            ergText += f"ℹ️ {countStatus} Schüler wurden wegen ihres Status übersprungen\n"
+        return ergText
+
 
     def generateLookups(self):
         for key in ["jahrgaenge","klassen","lehrer","faecher","lerngruppen", "schueler"]:

@@ -81,7 +81,7 @@ class ReportApp(tk.Tk):
             "Referenz-IDs aus File", "ReferenzIDs aus SuS-Ids", "LehrerReferenzen aus File","L-ReferenzIDs aus kuerzel", 
             "Jahrgangsteams", "idsLerngruppenZuLehrern","idsKlassenleitungenZuLehrern","Teams nicht erstellen",
             "schueler_csv", "sus_extern_csv", "lehrer_csv", "ClearScreen",
-            "show_objekt_by_id", "-ohne Funktion-", "-ohne Funktion-", "-ohne Funktion-",
+            "show_objekt_by_id", "-ohne Funktion-", "-ohne Funktion-", "ErgänzeSchülerAusDB",
             "ListeTeamBez","Übersicht Lernplattformen","TempHilfsfunktion","ErgänzeLehrerAusDB"
         ]
 
@@ -101,7 +101,8 @@ class ReportApp(tk.Tk):
             "lehrer_csv": "Erstellt die lehrer.csv-Datei zum import in MNSpro",
             "show_objekt_by_id": "Dialog zum Suchen und Anzeigen eines Objekts anhand von Typ und ID\nz.B. Schüler mit id=1234",
             "Serverzertifikat laden": "Lädt ein selbstsigniertes\nZertifikat herunter und\nspeichert es in ./server.pem",
-            "ErgänzeLehrerAusDB": "Veraltet - holt ggf.\nfehlende Lehrer über\neinen alternativen\nAPI-Endpunkt"
+            "ErgänzeLehrerAusDB": "Veraltet - holt ggf.\nfehlende Lehrer über\neinen alternativen\nAPI-Endpunkt",
+            "ErgänzeSchülerAusDB": "holt ggf. fehlende Schüler über GET /schueler/abschnitt/{abschnittId}",
         }
         
         # Buttons in einem <x> times 4 Grid
@@ -145,6 +146,9 @@ class ReportApp(tk.Tk):
                 self.report_text.see(tk.END)
             case "ErgänzeLehrerAusDB":
                 self.report_text.insert(tk.END,self.generator.ergaenzeLehrer())
+                self.report_text.see(tk.END)
+            case "ErgänzeSchülerAusDB":
+                self.report_text.insert(tk.END,self.generator.ergaenzeSchueler())
                 self.report_text.see(tk.END)
             case "Statistik anzeigen":
                 self.show_statistik()
