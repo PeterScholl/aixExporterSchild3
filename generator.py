@@ -4,6 +4,7 @@ import csv
 import sys
 import os
 from collections import Counter
+from enum import Enum
 from config_gui import load_config, show_config_gui, show_noteam_gui
 import fetch
 import svwsapi as sv
@@ -27,7 +28,105 @@ my_char_map = {
     # Add more mappings as needed
 }
 
+
+def _all_have(objs, key):
+    """True, wenn objs nicht leer ist und jedes Element den key besitzt."""
+    return bool(objs) and all(key in o for o in objs)
+
+
+class WorkflowStep(Enum):
+    """Benannte Zustände des Pflicht-Workflows (in der vorgesehenen Reihenfolge)."""
+    ABSCHNITT_VERBUNDEN = "Abschnitts-ID geholt"
+    LERNGRUPPEN_GEHOLT = "Lerngruppen geholt"
+    LOOKUPS_ERSTELLT = "Lookup-Dictionaries erstellt"
+    SCHUELER_ZU_LERNGRUPPEN = "Schüler-IDs zu Lerngruppen zugewiesen"
+    TEAMBEZ_ERSTELLT = "Team-Bezeichnungen erstellt"
+    REFERENZ_IDS_SCHUELER = "Referenz-IDs für Schüler zugewiesen"
+    LERNGRUPPEN_ZU_LEHRERN = "Lerngruppen-IDs zu Lehrern zugewiesen"
+    KLASSENLEITUNG_ZU_LEHRERN = "Klassenleitungs-IDs zu Lehrern zugewiesen"
+    REFERENZ_IDS_LEHRER = "Referenz-IDs für Lehrer zugewiesen"
+    SCHUELER_CSV = "Schüler-CSV exportiert"
+    SUS_EXTERN_CSV = "Externe-Schüler-CSV exportiert"
+    LEHRER_CSV = "Lehrer-CSV exportiert"
+
+
+class OptionalStep(Enum):
+    """Benannte Zustände für sinnvolle, aber nicht zwingend nötige Schritte."""
+    SCHUELER_AUS_DB = "Fehlende Schüler ergänzt"
+    LEHRER_AUS_DB = "Fehlende Lehrer ergänzt"
+    JAHRGANGSTEAMS = "Jahrgangsteams konfiguriert"
+    TEAMS_NICHT_ERSTELLEN = "Teams vom Export ausgeschlossen"
+
+
 class Generator():
+    # Pflichtkette für die Button-Führung: (Zustand, alternative Buttons dafür, ist-erledigt-Prüfung)
+    REQUIRED_CHAIN = [
+        (WorkflowStep.ABSCHNITT_VERBUNDEN, ["Abschnitts-ID holen"],
+            lambda g: getattr(g, "svws_abschnitts_id", None) is not None),
+        (WorkflowStep.LERNGRUPPEN_GEHOLT, ["Lerngruppen holen"],
+            lambda g: bool(getattr(g, "lerngruppen", []))),
+        (WorkflowStep.LOOKUPS_ERSTELLT, ["generateLookupDicts"],
+            lambda g: {"jahrgaenge", "klassen", "lehrer", "faecher", "lerngruppen", "schueler"}.issubset(g.lookupDict.keys())),
+        (WorkflowStep.SCHUELER_ZU_LERNGRUPPEN, ["idsSchuelerZuLerngruppen"],
+            lambda g: _all_have(getattr(g, "lerngruppen", []), "idsSchueler")),
+        (WorkflowStep.TEAMBEZ_ERSTELLT, ["TeamBezErstellen"],
+            lambda g: _all_have(getattr(g, "lerngruppen", []), "teamBez")),
+        (WorkflowStep.REFERENZ_IDS_SCHUELER, ["Referenz-IDs aus File", "ReferenzIDs aus SuS-Ids"],
+            lambda g: _all_have(getattr(g, "schueler", []), "referenzId")),
+        (WorkflowStep.LERNGRUPPEN_ZU_LEHRERN, ["idsLerngruppenZuLehrern"],
+            lambda g: _all_have(getattr(g, "lehrer", []), "idsLerngruppen")),
+        (WorkflowStep.KLASSENLEITUNG_ZU_LEHRERN, ["idsKlassenleitungenZuLehrern"],
+            lambda g: _all_have(getattr(g, "lehrer", []), "idsKlassenleitung")),
+        (WorkflowStep.REFERENZ_IDS_LEHRER, ["LehrerReferenzen aus File", "L-ReferenzIDs aus kuerzel"],
+            lambda g: _all_have(getattr(g, "lehrer", []), "referenzId")),
+        (WorkflowStep.SCHUELER_CSV, ["schueler_csv"],
+            lambda g: g.exportedFlags.get("schueler_csv", False)),
+        (WorkflowStep.SUS_EXTERN_CSV, ["sus_extern_csv"],
+            lambda g: g.exportedFlags.get("sus_extern_csv", False)),
+        (WorkflowStep.LEHRER_CSV, ["lehrer_csv"],
+            lambda g: g.exportedFlags.get("lehrer_csv", False)),
+    ]
+
+    # Optionale Schritte: (Zustand, Buttons, ist-sinnvoll-Prüfung, ist-erledigt-Prüfung oder None)
+    OPTIONAL_STEPS = [
+        (OptionalStep.SCHUELER_AUS_DB, ["ErgänzeSchülerAusDB"],
+            lambda g: bool(getattr(g, "lerngruppen", [])), None),
+        (OptionalStep.LEHRER_AUS_DB, ["ErgänzeLehrerAusDB"],
+            lambda g: bool(getattr(g, "lerngruppen", [])), None),
+        (OptionalStep.JAHRGANGSTEAMS, ["Jahrgangsteams"],
+            lambda g: bool(getattr(g, "lerngruppen", [])), None),
+        (OptionalStep.TEAMS_NICHT_ERSTELLEN, ["Teams nicht erstellen"],
+            lambda g: _all_have(getattr(g, "lerngruppen", []), "teamBez"), None),
+    ]
+
+    def get_button_states(self) -> dict[str, str]:
+        """Liefert für die Buttons der Führungs-Logik einen Status:
+        'next' (nächster Pflichtschritt), 'done' (bereits erledigt) oder 'optional' (sinnvoll, aber nicht zwingend).
+        Buttons ohne Eintrag sind entweder noch nicht dran oder nicht Teil der Führung."""
+        states = {}
+
+        # Pflichtkette: der erste noch nicht erledigte Schritt (inkl. aller alternativen Buttons dafür) wird 'next'
+        current_step_assigned = False
+        for _step, buttons, done_fn in self.REQUIRED_CHAIN:
+            if done_fn(self):
+                for b in buttons:
+                    states[b] = "done"
+            elif not current_step_assigned:
+                for b in buttons:
+                    states[b] = "next"
+                current_step_assigned = True
+            # weiter in der Zukunft liegende Schritte bleiben unmarkiert
+
+        # Optionale Schritte
+        for _step, buttons, relevant_fn, done_fn in self.OPTIONAL_STEPS:
+            if not relevant_fn(self):
+                continue
+            is_done = done_fn(self) if done_fn else False
+            for b in buttons:
+                states[b] = "done" if is_done else "optional"
+
+        return states
+
     def __init__(self):
         self.host = "nightly.svws-nrw.de"
         self.schema="GymAbiLite"
@@ -42,6 +141,7 @@ class Generator():
         self.jahrgangsteams = {"Lehrer": ["*"]} #Sicherstellen, dass dieses Attribut existiert
         self.noTeams = [] #Liste von Teambezeichnungen, die nicht erstellt werden sollen
         self.replaceSpecialChars = True # Sonderzeichen in Gruppen oder Namen ersetzen
+        self.exportedFlags = {} # merkt sich für die Button-Führung, welche CSV-Exporte bereits erfolgreich liefen
         sv.setConfig(self.base_url, (self.username, self.password))
         if os.path.exists("server.pem"):
             sv.verify="server.pem"
@@ -445,6 +545,7 @@ class Generator():
                 writer.writerow([referenzId, vorname, nachname, klasse, kurse])
         if countNoTeams > 0: ergText+=(f"ℹ️ Es wurden {countNoTeams} Verknüpfungen wegen nicht zu erstellender Teams verhindert\n")
         ergText+=(f"✅ CSV-Datei '{filename}' wurde mit {count} Einträgen erstellt.\n")
+        self.exportedFlags["sus_extern_csv" if filename == "StudentExternal.csv" else "schueler_csv"] = True
         return ergText
 
     def writeLuLCSV(self):
@@ -515,6 +616,7 @@ class Generator():
 
         if countNoTeams > 0: ergText+=(f"ℹ️ Es wurden {countNoTeams} Verknüpfungen wegen nicht zu erstellender Teams verhindert\n")
         ergText+=(f"✅ CSV-Datei 'Teacher.csv' wurde mit {count} Einträgen erstellt.\n")
+        self.exportedFlags["lehrer_csv"] = True
         return ergText
 
     def import_referenz_ids(self, master, art="schueler", idBez="id"):

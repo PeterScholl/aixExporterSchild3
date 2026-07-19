@@ -106,11 +106,16 @@ class ReportApp(tk.Tk):
         }
         
         # Buttons in einem <x> times 4 Grid
+        self.buttons = {}  # merkt sich die Button-Widgets für die Führungs-Farben
+        self.default_button_bg = None
         for i, text in enumerate(button_texts):
             button = tk.Button(button_frame, text=text, command=lambda t=text: self.button_clicked(t))
             button.grid(row=i//4, column=i%4, padx=5, pady=5)  # Grid positionierung
             if (text in tooltip):
                 ToolTip(button, tooltip[text])
+            self.buttons[text] = button
+            if self.default_button_bg is None:
+                self.default_button_bg = button.cget("bg")
 
         # Einstellungen speichern
         self.sonderzeichenErsetzen = tk.BooleanVar(value=True) #Ersetzt Sonderzeichen aus der Charmap
@@ -118,6 +123,24 @@ class ReportApp(tk.Tk):
         # Status.json prüfen ggf. anlegen
         if not os.path.exists("status.json"):
             self.save_state()
+
+        self.refresh_button_highlighting()
+
+    # Farben für die Button-Führung
+    COLOR_NEXT = "#8fd98f"      # grün - nächster Pflichtschritt
+    COLOR_DONE = "#b0c4de"      # graublau - bereits erledigt
+    COLOR_OPTIONAL = "#ffe08a"  # gelb - sinnvoll, aber nicht zwingend nötig
+
+    def refresh_button_highlighting(self):
+        """Färbt die Buttons entsprechend des aktuellen Workflow-Zustands ein (siehe Generator.get_button_states)."""
+        states = self.generator.get_button_states()
+        color_by_state = {
+            "next": self.COLOR_NEXT,
+            "done": self.COLOR_DONE,
+            "optional": self.COLOR_OPTIONAL,
+        }
+        for text, button in self.buttons.items():
+            button.config(bg=color_by_state.get(states.get(text), self.default_button_bg))
 
     def button_clicked(self, text):
         print(f"Button '{text}' clicked")
@@ -238,6 +261,7 @@ class ReportApp(tk.Tk):
             case _:
                 print("Ubekannter Button")
 
+        self.refresh_button_highlighting()
 
     def save_object_to_json(self, obj, filename):
         """Speichert ein Objekt in eine JSON-Datei."""
@@ -268,7 +292,8 @@ class ReportApp(tk.Tk):
         self.report_text.insert(tk.END,"Konfiguration geladen!\nGeneriere Lookup Dictionaries ...")
         self.generator.generateLookups()
         self.report_text.insert(tk.END," DONE\n")
-        
+        self.refresh_button_highlighting()
+
     def load_object_from_json(self, cls, filename):
         """Lädt ein Objekt einer bestimmten Klasse von einer JSON-Datei."""
         try:

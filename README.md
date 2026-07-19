@@ -91,3 +91,29 @@ Man kann mittels Statistik erstellen schon ein wenig prüfen auch die TempHilfsF
 ### Export-Dateien erstellen
 
 Der eigentliche Export geschieht über die drei Buttons schueler_csv, sus_extern_csv und lehrer_csv - wenn alles gut läuft werden die entsprechenden csv-Dateien erstellt.
+
+## Button-Führung (Farben)
+
+Damit man auch nach einer Pause weiß, wo man stehen geblieben ist, färbt das Programm die Buttons passend zum aktuellen Bearbeitungsstand ein. Der Zustand wird dabei nicht separat gemerkt, sondern bei jedem Klick direkt aus den vorhandenen Daten (Lerngruppen, Schüler, Lehrer, ...) neu ermittelt - er kann also nicht "falsch" werden, selbst wenn Schritte in anderer Reihenfolge oder mehrfach ausgeführt werden.
+
+- **Grün**: der nächste noch fehlende Pflichtschritt. Gibt es für einen Schritt zwei gleichwertige Buttons (z.B. bei den Referenz-IDs "aus File" oder "aus SuS-Ids"/"aus kuerzel"), werden beide grün markiert - es reicht, einen davon zu benutzen.
+- **Graublau**: bereits erledigte Schritte.
+- **Gelb**: Schritte, die gerade sinnvoll wären, aber nicht zwingend nötig sind (z.B. Ergänze Schüler/Lehrer aus DB, Jahrgangsteams, Teams nicht erstellen).
+- **Unverändert**: reine Hilfs- und Kontrollbuttons (Statistik anzeigen, Serverzertifikat laden, ClearScreen, ...) sowie die Verbindungseinstellung sind nicht Teil der Führung und bleiben immer normal nutzbar.
+
+Der Pflichtpfad umfasst der Reihe nach: Abschnitts-ID holen → Lerngruppen holen → generateLookupDicts → idsSchuelerZuLerngruppen → TeamBezErstellen → Referenz-IDs für Schüler → idsLerngruppenZuLehrern → idsKlassenleitungenZuLehrern → Referenz-IDs für Lehrer → schueler_csv → sus_extern_csv → lehrer_csv.
+
+Die genauen Zustände sind in `generator.py` als `WorkflowStep` (Pflichtschritte) und `OptionalStep` (situative Schritte) benannt.
+
+## Exe erstellen
+
+Die exe wird mit [PyInstaller](https://pyinstaller.org/) gebaut und landet als Einzeldatei im Ordner `dist/`. Die Konfiguration liegt in `SchildMNSDataMatcher_GUI.spec` (u.a. `console=True`, damit weiterhin ein Konsolenfenster mit den Debug-/Fehlerausgaben erscheint).
+
+```bash
+pip install pyinstaller
+python -m PyInstaller SchildMNSDataMatcher_GUI.spec
+```
+
+**Wichtig:** Die vorhandene `.spec`-Datei verwenden (nicht `python -m PyInstaller --onefile SchildMNSDataMatcher_GUI.py` direkt aufrufen), damit die dort festgelegten Einstellungen wie `console=True` erhalten bleiben und nicht durch eine neu generierte Standard-`.spec` überschrieben werden.
+
+Nach dem Build liegt `SchildMNSDataMatcher_GUI.exe` in `dist/`.
