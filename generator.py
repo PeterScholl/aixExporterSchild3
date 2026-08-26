@@ -403,13 +403,13 @@ class Generator():
                                 countjg+=1
                                 prefix = self.get_jahrgang_von_schueler(idsSchueler[0])
                                 if (len(self.get_kl_jg_zu_schuelerIDListe(idsSchueler, art="jahrgaenge"))!=1):
-                                    resultText+=f"WARNUNG: Lerngruppe {prefix} - {lgbezeichnung} mit ID {lg.get('id','?')} hat als Jahrgangsteam Schüler mehrerer Jahrgänge: {self.get_kl_jg_zu_schuelerIDListe(idsSchueler, art="jahrgaenge")}\n"
+                                    resultText+=f"WARNUNG: Lerngruppe {prefix} - {lgbezeichnung} mit ID {lg.get('id','?')} hat als Jahrgangsteam Schüler mehrerer Jahrgänge: {self.get_kl_jg_zu_schuelerIDListe(idsSchueler, art='jahrgaenge')}\n"
                                 jahrgang = prefix
                             else:
                                 #Klasse eines Schuelers holen
                                 prefix = self.get_klasse_von_schueler(idsSchueler[0])
                                 if (len(self.get_kl_jg_zu_schuelerIDListe(idsSchueler, art="klassen"))!=1):
-                                    resultText+=f"WARNUNG: Lerngruppe {prefix} - {lgbezeichnung} mit ID {lg.get('id','?')} hat als Klassenteam Schüler mehrerer Klassen: {self.get_kl_jg_zu_schuelerIDListe(idsSchueler, art="klassen")}\n"
+                                    resultText+=f"WARNUNG: Lerngruppe {prefix} - {lgbezeichnung} mit ID {lg.get('id','?')} hat als Klassenteam Schüler mehrerer Klassen: {self.get_kl_jg_zu_schuelerIDListe(idsSchueler, art='klassen')}\n"
                                 jahrgang = self.get_jahrgang_von_schueler(idsSchueler[0])
                             if prefix:
                                 count+=1

@@ -92,6 +92,58 @@ Man kann mittels Statistik erstellen schon ein wenig prüfen auch die TempHilfsF
 
 Der eigentliche Export geschieht über die drei Buttons schueler_csv, sus_extern_csv und lehrer_csv - wenn alles gut läuft werden die entsprechenden csv-Dateien erstellt.
 
+## CSV-Import-Format für MNSpro Cloud
+
+Quelle: [MNSpro Cloud FAQ – Schuljahreswechsel / MNSpro Cloud Hybrid](https://docs.mnspro.cloud/faq-frequently-asked-questions/mnspro-cloud/schuljahreswechsel/mnspro-cloud-hybrid) und [MNSpro Cloud – CSV-Import/Massenimport](https://docs.mnspro.cloud/mnspro-classic/cloud-gruppen-neu/csv-import-massenimport).
+
+### Aktuell von diesem Tool erzeugtes Format (alt)
+
+`writeSuSCSV`/`writeLuLCSV` in `generator.py` schreiben aktuell semikolon-getrennte Dateien mit der Kopfzeile
+
+```text
+ReferenzId;Vorname;Nachname;Klassen;Gruppen
+```
+
+wobei in der Spalte `Gruppen` mehrere Team-/Kursbezeichnungen mit `|` getrennt zusammengefasst werden. Das entspricht dem alten Arbeitsgruppen-Import von MNSpro.
+
+### Neues Format seit MNSpro 2026 (Cloud-Gruppen)
+
+Mit MNSpro 2026 gibt es die neue Cloud-Gruppen-Funktion. Für den Import (u.a. Massenimport von Lehrern/Schülern) werden folgende Spalten unterstützt:
+
+| Spalte           | Pflicht?                 | Bedeutung |
+| ---------------- | ------------------------ | --------- |
+| `Vorname`        | ja                       | Vorname |
+| `Nachname`       | ja                       | Nachname |
+| `Referenz-ID`    | optional, aber empfohlen | eindeutige Referenz-ID (z.B. GUID) |
+| `Anmeldename`    | optional                 | Anmeldename |
+| `Klassen`        | optional                 | Klassenzuordnung |
+| `Arbeitsgruppen` | optional                 | lokale Arbeitsgruppen (klassisches MNSpro, **nicht** für Cloud-Gruppen) |
+| `Cloud#Kurs`     | optional                 | Cloud-Kurse (ehemals „Arbeitsgruppen/Kurse"), mehrere Kurse durch `\|` getrennt |
+| `Cloud#Gruppe`   | optional, **neu**        | Gruppen/Fachschaften, mehrere Gruppen durch `\|` getrennt |
+
+**Wichtig:** Die Spaltennamen sind laut Dokumentation im Singular (`Cloud#Kurs`, `Cloud#Gruppe`), nicht im Plural.
+
+Allgemeine Regeln:
+
+- Das System erkennt sowohl **Komma** als auch **Semikolon** als Feldtrennzeichen automatisch, Zeilenumbrüche trennen die Datensätze.
+- Eine **Kopfzeile** mit den obigen Spaltennamen ist zwingend erforderlich.
+- Felder sollten idealerweise in **Anführungszeichen** stehen.
+- Die Datei muss **UTF-8**-kodiert sein.
+- Innerhalb von `Arbeitsgruppen`, `Cloud#Kurs` und `Cloud#Gruppe` gelten folgende Sonderzeichen:
+  - `|` trennt mehrere Gruppen/Kurse innerhalb einer Zelle.
+  - `*` ist ein Platzhalter für bereits vorhandene Arbeitsgruppen/Klassen des Benutzers (Wert bleibt unverändert).
+  - `^` kennzeichnet den Benutzer als Verwalter/Besitzer der jeweiligen Gruppe.
+  - Pro Kurs bzw. Gruppe gilt eine **Grenze von 100 Besitzern** – darüber hinausgehende Besitzer werden automatisch zu Mitgliedern.
+- **Achtung:** Wird die Spalte `Arbeitsgruppen` angegeben, werden die Arbeitsgruppen **aller** Benutzer angepasst (überschrieben). Um sie unverändert zu lassen, muss die Spalte mit `*` befüllt werden.
+- Beim Massenimport mit `Cloud#Kurs` muss zusätzlich das **Ziel-Schuljahr** ausgewählt werden, dem die Kurse zugeordnet werden.
+
+### Unterschied Cloud#Kurs vs. Cloud#Gruppe
+
+- **`Cloud#Kurs`**: reguläre Cloud-Kurse (Klassenteams, Jahrgangsteams, Fachkurse etc.) – jeweils einem Ziel-Schuljahr zugeordnet.
+- **`Cloud#Gruppe`**: Gruppen ohne Schuljahresbezug, z.B. Fachschaften.
+
+Für dieses Tool bedeutet das (siehe auch offener TODO-Punkt zur Ermittlung, welche Lerngruppen Kurs vs. Gruppe sind): In der Regel werden Klassen-, Jahrgangs- und Fachkurse als `Cloud#Kurs` exportiert. Nur die manuell eingerichteten AGs und Jahrgangsteams fallen heraus und müssten ggf. als `Cloud#Gruppe` behandelt werden.
+
 ## Button-Führung (Farben)
 
 Damit man auch nach einer Pause weiß, wo man stehen geblieben ist, färbt das Programm die Buttons passend zum aktuellen Bearbeitungsstand ein. Der Zustand wird dabei nicht separat gemerkt, sondern bei jedem Klick direkt aus den vorhandenen Daten (Lerngruppen, Schüler, Lehrer, ...) neu ermittelt - er kann also nicht "falsch" werden, selbst wenn Schritte in anderer Reihenfolge oder mehrfach ausgeführt werden.
