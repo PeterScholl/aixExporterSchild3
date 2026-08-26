@@ -575,6 +575,64 @@ class Generator():
         vorhandene = {lg.get("kursartKuerzel") for lg in getattr(self, "lerngruppen", []) if lg.get("kursartKuerzel")}
         return sorted(vorhandene - set(self.kursart_zuordnung.keys()))
 
+    def zuordnung_uebersicht(self) -> str:
+        """Kontroll-/Vorschau-Report (Schritt 4, siehe TODO.md): zeigt je Zielkategorie
+        (Arbeitsgruppe/Cloud#Kurs/Cloud#Gruppe, siehe self.ziel_spalten) die betroffenen
+        Lerngruppen - Grundlage ist get_ziel_fuer_lerngruppe() für jede einzelne Lerngruppe.
+        Warnt außerdem vor
+        - Lerngruppen, die (noch) keiner Zielkategorie zugeordnet werden können, und
+        - Team-Bezeichnungen, die in mehreren Zielkategorien gleichzeitig auftauchen (die drei
+          Zielkategorien sind getrennte Namensräume in MNSpro - das kann dort zu Verwechslungen
+          führen).
+        Gedacht als letzter Kontrollschritt vor dem eigentlichen CSV-Export."""
+        lerngruppen = getattr(self, "lerngruppen", [])
+        if not lerngruppen:
+            return "Keine Lerngruppen vorhanden.\n"
+
+        je_ziel = {ziel: [] for ziel in self.ziel_spalten}
+        nicht_klassifiziert = []
+        name_zu_zielen = {}  # Team-Bezeichnung -> Menge der Zielkategorien, in denen sie auftaucht
+
+        for lg in lerngruppen:
+            name = lg.get("teamBez") or lg.get("bezeichnung") or f'ID {lg.get("id")}'
+            lg_id = lg.get("id")
+            ziel = self.get_ziel_fuer_lerngruppe(lg)
+            if ziel is None:
+                nicht_klassifiziert.append(lg)
+                continue
+            je_ziel.setdefault(ziel, []).append((name, lg_id))
+            name_zu_zielen.setdefault(name, set()).add(ziel)
+
+        resultText = f"Zuordnungs-Übersicht ({len(lerngruppen)} Lerngruppen gesamt):\n\n"
+
+        for ziel, spalte in self.ziel_spalten.items():
+            eintraege = sorted(je_ziel.get(ziel, []))
+            resultText += f"=== {spalte} ({ziel}) - {len(eintraege)} Lerngruppen ===\n"
+            for name, lg_id in eintraege:
+                resultText += f"  {name} (id: {lg_id})\n"
+            resultText += "\n"
+
+        if nicht_klassifiziert:
+            resultText += f"⚠️ {len(nicht_klassifiziert)} Lerngruppen sind NICHT klassifiziert:\n"
+            for lg in sorted(nicht_klassifiziert, key=lambda lg: lg.get("bezeichnung") or ""):
+                name = lg.get("teamBez") or lg.get("bezeichnung") or f'ID {lg.get("id")}'
+                kuerzel = lg.get("kursartKuerzel", "(kein kursartKuerzel)")
+                resultText += f"  {name} (id: {lg.get('id')}) (kursartKuerzel: {kuerzel})\n"
+            resultText += "\n"
+        else:
+            resultText += "✅ Alle Lerngruppen sind klassifiziert.\n\n"
+
+        doppelte = {name: ziele for name, ziele in name_zu_zielen.items() if len(ziele) > 1}
+        if doppelte:
+            resultText += (f"⚠️ {len(doppelte)} Team-Bezeichnungen tauchen in mehreren Zielkategorien auf "
+                            "(getrennte Namensräume - kann in MNSpro zu Verwechslungen führen):\n")
+            for name, ziele in sorted(doppelte.items()):
+                spalten = ", ".join(self.ziel_spalten.get(z, z) for z in sorted(ziele))
+                resultText += f"  {name}: {spalten}\n"
+            resultText += "\n"
+
+        return resultText
+
     def get_klasse_von_schueler(self, schueler_id: int) -> str | None:
         # Schüler nachschlagen
         schueler = self.lookupDict.get("schueler", {}).get(schueler_id)

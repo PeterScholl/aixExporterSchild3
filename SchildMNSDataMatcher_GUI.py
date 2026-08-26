@@ -53,7 +53,7 @@ class ReportApp(tk.Tk):
             "Teams nicht erstellen", "schueler_csv", "sus_extern_csv", "lehrer_csv",
             "ClearScreen", "show_objekt_by_id", "LeereLerngruppenLöschen", "ErgänzeSchülerAusDB",
             "ListeTeamBez","Übersicht Lernplattformen","TempHilfsfunktion","ErgänzeLehrerAusDB",
-            "BezeichnungsMusterBearbeiten"
+            "BezeichnungsMusterBearbeiten", "ZuordnungUebersicht"
         ]
 
         tooltip = {
@@ -77,6 +77,7 @@ class ReportApp(tk.Tk):
             "ErgänzeSchülerAusDB": "holt ggf. fehlende Schüler über GET /schueler/abschnitt/{abschnittId}",
             "LeereLerngruppenLöschen": "Löscht Lerngruppen ohne Schüler\n(z.B. in der Planungsphase eines Schuljahres hilfreich)\nBereinigt dabei auch die Verweise bei Lehrern und Schülern\n(idsLerngruppen) sowie im Lookup-Dict und bei Kursart-Overrides.\nFragt vorher zur Sicherheit nach.",
             "BezeichnungsMusterBearbeiten": "Regex-Muster auf die Bezeichnung einer Lerngruppe,\ndie VOR der kursartKuerzel-Regel über die Zielkategorie\n(Arbeitsgruppe/Cloud#Kurs/Cloud#Gruppe) entscheiden.\nReihenfolge in der Liste = Priorität, erstes Match gewinnt.",
+            "ZuordnungUebersicht": "Kontrolle vor dem Export: zeigt je Zielkategorie\n(Arbeitsgruppe/Cloud#Kurs/Cloud#Gruppe) die betroffenen Lerngruppen,\nwarnt vor nicht klassifizierten Lerngruppen und vor Team-Bezeichnungen,\ndie in mehreren Zielkategorien gleichzeitig auftauchen.",
         }
         
         # Buttons in einem <x> times 4 Grid
@@ -152,6 +153,9 @@ class ReportApp(tk.Tk):
                 self.report_text.see(tk.END)
             case "BezeichnungsMusterBearbeiten":
                 self.generator.edit_bezeichnung_muster(self)
+            case "ZuordnungUebersicht":
+                self.report_text.delete(1.0, tk.END)
+                self.report_text.insert(tk.END, self.generator.zuordnung_uebersicht())
             case "Statistik anzeigen":
                 self.show_statistik()
             case "show_objekt_by_id":

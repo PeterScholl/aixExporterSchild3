@@ -94,9 +94,10 @@ Reihenfolge zum gemeinsamen Abarbeiten, jeder Schritt einzeln umsetz- und testba
   - Anwendung in `get_ziel_fuer_lerngruppe` vor der `kursartKuerzel`-Regel war bereits in Schritt 1 vorgesehen und unverändert.
   - Neuer Button **BezeichnungsMusterBearbeiten** (Utility, kein Pflichtschritt, da Muster optional/ergänzend sind) am Ende der Button-Liste ergänzt.
 
-- [ ] **Schritt 4 – Kontroll-/Vorschau-Funktion**
-  - Neue Funktion (z.B. `zuordnung_uebersicht`), die je Zielkategorie die betroffenen Lerngruppen auflistet, "nicht klassifizierte" Fälle sowie doppelte Bezeichnungen über Zielkategorien hinweg warnt.
-  - Als Button ergänzen, idealerweise direkt vor den Export-Buttons nutzbar.
+- [x] **Schritt 4 – Kontroll-/Vorschau-Funktion**
+  - Neue Methode `zuordnung_uebersicht(self) -> str` in `generator.py`: listet je Zielkategorie (Arbeitsgruppe/Cloud#Kurs/Cloud#Gruppe) die betroffenen Lerngruppen auf, warnt vor nicht klassifizierten Lerngruppen (inkl. `kursartKuerzel`) und vor Team-Bezeichnungen, die in mehreren Zielkategorien gleichzeitig auftauchen.
+  - Neuer Button **ZuordnungUebersicht** (ans Ende der Button-Liste ergänzt, nicht direkt vor die Export-Buttons verschoben, um nicht ungefragt die Reihenfolge erneut zu zerreißen – auf Wunsch kann das wie bei `KursartZuordnung` in Schritt 2 noch nachgezogen werden).
+  - Ausgabe wie bei "Statistik anzeigen": Textfeld wird geleert und neu befüllt.
 
 - [ ] **Schritt 5 – Besitzer-Markierung (`^`) für Kursleiter**
   - Checkbox "Besitzer markieren" in `config_gui.py` (Standard: an), Persistenz über `self.besitzer_markieren`.
