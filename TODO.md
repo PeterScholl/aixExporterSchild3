@@ -98,6 +98,7 @@ Reihenfolge zum gemeinsamen Abarbeiten, jeder Schritt einzeln umsetz- und testba
   - Neue Methode `zuordnung_uebersicht(self) -> str` in `generator.py`: listet je Zielkategorie (Arbeitsgruppe/Cloud#Kurs/Cloud#Gruppe) die betroffenen Lerngruppen auf, warnt vor nicht klassifizierten Lerngruppen (inkl. `kursartKuerzel`) und vor Team-Bezeichnungen, die in mehreren Zielkategorien gleichzeitig auftauchen.
   - Neuer Button **ZuordnungUebersicht** (ans Ende der Button-Liste ergänzt, nicht direkt vor die Export-Buttons verschoben, um nicht ungefragt die Reihenfolge erneut zu zerreißen – auf Wunsch kann das wie bei `KursartZuordnung` in Schritt 2 noch nachgezogen werden).
   - Ausgabe wie bei "Statistik anzeigen": Textfeld wird geleert und neu befüllt.
+  - **Nachträglich behobene Lücke:** Lerngruppen mit `kursartKuerzel = null` (typischerweise normale Fachkurse) fielen bislang überall durch (`if lg.get("kursartKuerzel")`-Filter). Jetzt eigenes Pseudo-Kürzel `KEIN_KURSARTKUERZEL = "(ohne kursartKuerzel)"` in `get_ziel_fuer_lerngruppe`, `fehlende_kursart_zuordnungen`, `edit_kursart_zuordnung` und `zuordnung_uebersicht` berücksichtigt, mit Standard-Vorschlag "Kurs" in `KURSART_ZUORDNUNG_VORSCHLAG`.
 
 - [ ] **Schritt 5 – Besitzer-Markierung (`^`) für Kursleiter**
   - Checkbox "Besitzer markieren" in `config_gui.py` (Standard: an), Persistenz über `self.besitzer_markieren`.

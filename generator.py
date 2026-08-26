@@ -30,6 +30,13 @@ my_char_map = {
     # Add more mappings as needed
 }
 
+# Pseudo-kursartKuerzel für Lerngruppen ohne kursartKuerzel (None/leer/fehlend) - typischerweise
+# die "normalen" Fachkurse, die in Schild kein besonderes Kürzel bekommen (im Gegensatz zu z.B.
+# AGs oder Förderkursen). Wird als eigener Schlüssel in self.kursart_zuordnung geführt, damit
+# diese Lerngruppen nicht unsichtbar durch die Zuordnung fallen (siehe get_ziel_fuer_lerngruppe,
+# fehlende_kursart_zuordnungen, edit_kursart_zuordnung).
+KEIN_KURSARTKUERZEL = "(ohne kursartKuerzel)"
+
 # Startvorschlag für die Kursart-Zuordnung (welches kursartKuerzel gehört zu welcher
 # Zielkategorie Arbeitsgruppe/Kurs/Gruppe, siehe Generator.ziel_spalten). Nur eine Vorbelegung
 # für den Dialog edit_kursart_zuordnung(), basierend auf den bislang bekannten Kürzeln aus
@@ -43,6 +50,7 @@ KURSART_ZUORDNUNG_VORSCHLAG = {
     "LK": "kurs",
     "PUT": "kurs",
     "WPII": "kurs",
+    KEIN_KURSARTKUERZEL: "kurs",  # normale Fachkurse ohne kursartKuerzel -> Standard "Kurs"
 }
 
 
@@ -542,7 +550,9 @@ class Generator():
         Prioritätsreihenfolge:
         1. manueller Einzel-Override über die Lerngruppen-ID (self.zuordnung_overrides)
         2. Bezeichnungs-Muster (Regex, in Reihenfolge geprüft; erstes Match gewinnt)
-        3. kursartKuerzel-Zuordnungstabelle (self.kursart_zuordnung)
+        3. kursartKuerzel-Zuordnungstabelle (self.kursart_zuordnung) - Lerngruppen ohne
+           kursartKuerzel (None/leer/fehlend, typischerweise normale Fachkurse) werden dabei unter
+           dem Pseudo-Kürzel KEIN_KURSARTKUERZEL geführt, damit sie nicht unsichtbar durchfallen.
 
         Liefert None, wenn keine der drei Stufen zutrifft (= noch nicht klassifiziert).
         """
@@ -561,8 +571,8 @@ class Generator():
             except re.error:
                 continue  # ungültiges Muster wird ignoriert statt das Programm abzubrechen
 
-        kursartKuerzel = lg.get("kursartKuerzel")
-        if kursartKuerzel is not None and kursartKuerzel in self.kursart_zuordnung:
+        kursartKuerzel = lg.get("kursartKuerzel") or KEIN_KURSARTKUERZEL
+        if kursartKuerzel in self.kursart_zuordnung:
             return self.kursart_zuordnung[kursartKuerzel]
 
         return None
@@ -570,9 +580,11 @@ class Generator():
     def fehlende_kursart_zuordnungen(self) -> list:
         """Liefert alle in self.lerngruppen vorkommenden kursartKuerzel (sortiert), für die noch
         keine Zielkategorie (Arbeitsgruppe/Kurs/Gruppe, siehe self.ziel_spalten) in
-        self.kursart_zuordnung hinterlegt ist. Grundlage für den in Schritt 2 geplanten
-        Pflicht-Dialog zur Kursart-Zuordnung."""
-        vorhandene = {lg.get("kursartKuerzel") for lg in getattr(self, "lerngruppen", []) if lg.get("kursartKuerzel")}
+        self.kursart_zuordnung hinterlegt ist. Lerngruppen ohne kursartKuerzel (None/leer/fehlend -
+        typischerweise normale Fachkurse) zählen dabei unter dem Pseudo-Kürzel
+        KEIN_KURSARTKUERZEL mit, damit sie nicht unsichtbar durchfallen. Grundlage für den
+        Pflicht-Dialog zur Kursart-Zuordnung (edit_kursart_zuordnung)."""
+        vorhandene = {lg.get("kursartKuerzel") or KEIN_KURSARTKUERZEL for lg in getattr(self, "lerngruppen", [])}
         return sorted(vorhandene - set(self.kursart_zuordnung.keys()))
 
     def zuordnung_uebersicht(self) -> str:
@@ -616,7 +628,7 @@ class Generator():
             resultText += f"⚠️ {len(nicht_klassifiziert)} Lerngruppen sind NICHT klassifiziert:\n"
             for lg in sorted(nicht_klassifiziert, key=lambda lg: lg.get("bezeichnung") or ""):
                 name = lg.get("teamBez") or lg.get("bezeichnung") or f'ID {lg.get("id")}'
-                kuerzel = lg.get("kursartKuerzel", "(kein kursartKuerzel)")
+                kuerzel = lg.get("kursartKuerzel") or KEIN_KURSARTKUERZEL
                 resultText += f"  {name} (id: {lg.get('id')}) (kursartKuerzel: {kuerzel})\n"
             resultText += "\n"
         else:
@@ -1013,12 +1025,13 @@ class Generator():
 
     def _teambez_beispiele_je_kursart(self, kuerzel: str, max_anzahl: int = 25) -> list:
         """Team-Bezeichnungen (ersatzweise Bezeichnung, falls teamBez noch fehlt) aller
-        Lerngruppen mit diesem kursartKuerzel - als Grundlage für den Hover-Tooltip im
-        Kursart-Zuordnungs-Dialog, damit z.B. klar wird, wofür ein Kürzel wie "FOGT" steht."""
+        Lerngruppen mit diesem kursartKuerzel (bzw. KEIN_KURSARTKUERZEL für Lerngruppen ohne
+        kursartKuerzel) - als Grundlage für den Hover-Tooltip im Kursart-Zuordnungs-Dialog, damit
+        z.B. klar wird, wofür ein Kürzel wie "FOGT" steht."""
         werte = sorted({
             lg.get("teamBez") or lg.get("bezeichnung")
             for lg in getattr(self, "lerngruppen", [])
-            if lg.get("kursartKuerzel") == kuerzel and (lg.get("teamBez") or lg.get("bezeichnung"))
+            if (lg.get("kursartKuerzel") or KEIN_KURSARTKUERZEL) == kuerzel and (lg.get("teamBez") or lg.get("bezeichnung"))
         })
         if len(werte) > max_anzahl:
             return werte[:max_anzahl] + [f"… und {len(werte) - max_anzahl} weitere"]
@@ -1029,17 +1042,21 @@ class Generator():
         vorkommende kursartKuerzel die Zielkategorie fest - also die Unterscheidung, ob Lerngruppen
         mit diesem Kürzel beim Export als Arbeitsgruppe, Cloud#Kurs oder Cloud#Gruppe behandelt
         werden (siehe self.ziel_spalten und README.md, Abschnitt "CSV-Import-Format für MNSpro
-        Cloud"). Als Startvorschlag dient KURSART_ZUORDNUNG_VORSCHLAG, sofern für ein Kürzel noch
-        keine Zuordnung gespeichert ist - übernommen wird das aber erst mit "Speichern & Schließen"."""
+        Cloud"). Lerngruppen ohne kursartKuerzel (None/leer/fehlend - typischerweise normale
+        Fachkurse) laufen dabei unter dem Pseudo-Kürzel KEIN_KURSARTKUERZEL mit, damit sie nicht
+        unsichtbar durchfallen. Als Startvorschlag dient KURSART_ZUORDNUNG_VORSCHLAG, sofern für
+        ein Kürzel noch keine Zuordnung gespeichert ist - übernommen wird das aber erst mit
+        "Speichern & Schließen"."""
         NICHT_KLASSIFIZIERT = "– nicht klassifiziert –"
 
-        alle_kuerzel = sorted({lg.get("kursartKuerzel") for lg in getattr(self, "lerngruppen", []) if lg.get("kursartKuerzel")})
-        if not alle_kuerzel:
+        lerngruppen = getattr(self, "lerngruppen", [])
+        if not lerngruppen:
             messagebox.showinfo("Kursart-Zuordnung",
-                "Keine Lerngruppen mit kursartKuerzel vorhanden - bitte zuerst Lerngruppen holen.", parent=master)
+                "Keine Lerngruppen vorhanden - bitte zuerst Lerngruppen holen.", parent=master)
             return
 
-        anzahl = Counter(lg.get("kursartKuerzel") for lg in self.lerngruppen if lg.get("kursartKuerzel"))
+        alle_kuerzel = sorted({lg.get("kursartKuerzel") or KEIN_KURSARTKUERZEL for lg in lerngruppen})
+        anzahl = Counter(lg.get("kursartKuerzel") or KEIN_KURSARTKUERZEL for lg in lerngruppen)
 
         win = tk.Toplevel(master)
         win.title("Kursart-Zuordnung (Arbeitsgruppe / Kurs / Gruppe)")
