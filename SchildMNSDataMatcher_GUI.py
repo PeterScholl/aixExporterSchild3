@@ -5,40 +5,10 @@ import tkinter as tk
 import generator as logic
 import webbrowser
 from tkinter import ttk, messagebox, filedialog
+from ui_widgets import ToolTip
 
 # Exe erstellen mit: python -m PyInstaller --onefile .\SchildMNSDataMatcher_GUI.py
 
-class ToolTip:
-    def __init__(self, widget, text, delay = 500):
-        self.widget = widget
-        self.text = text
-        self.delay = delay  # Millisekunden
-        self.tooltip = None
-        self.after_id = None
-
-        widget.bind("<Enter>", self.schedule_show)
-        widget.bind("<Leave>", self.cancel_tooltip)
-
-    def schedule_show(self, event):
-        self.cancel_tooltip()
-        self.after_id = self.widget.after(self.delay, lambda: self.show_tooltip(event))
-
-    def show_tooltip(self, event):
-        # Tooltip Fenster erstellen
-        self.tooltip = tk.Toplevel(self.widget)
-        self.tooltip.wm_overrideredirect(True)  # Kein Fensterrahmen
-        self.tooltip.wm_geometry(f"+{event.x_root+10}+{event.y_root+10}")
-        label = tk.Label(self.tooltip, text=self.text, background="lightgrey", relief="solid", borderwidth=1)
-        label.pack()
-
-    def cancel_tooltip(self, event=None):
-        if self.after_id:
-            self.widget.after_cancel(self.after_id)
-            self.after_id = None
-        if self.tooltip:
-            self.tooltip.destroy()
-            self.tooltip = None
-            
 class ReportApp(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -77,11 +47,11 @@ class ReportApp(tk.Tk):
         # Die Buttons im Grid
         button_texts = [
             "Verbindungseinstellung", "Abschnitts-ID holen", "Lerngruppen holen","Statistik anzeigen", 
-            "Serverzertifikat laden", "generateLookupDicts", "idsSchuelerZuLerngruppen", "TeamBezErstellen", 
-            "Referenz-IDs aus File", "ReferenzIDs aus SuS-Ids", "LehrerReferenzen aus File","L-ReferenzIDs aus kuerzel", 
-            "Jahrgangsteams", "idsLerngruppenZuLehrern","idsKlassenleitungenZuLehrern","Teams nicht erstellen",
-            "schueler_csv", "sus_extern_csv", "lehrer_csv", "ClearScreen",
-            "show_objekt_by_id", "-ohne Funktion-", "-ohne Funktion-", "ErgänzeSchülerAusDB",
+            "Serverzertifikat laden", "generateLookupDicts", "idsSchuelerZuLerngruppen", "TeamBezErstellen",
+            "KursartZuordnung", "Referenz-IDs aus File", "ReferenzIDs aus SuS-Ids", "LehrerReferenzen aus File",
+            "L-ReferenzIDs aus kuerzel", "Jahrgangsteams", "idsLerngruppenZuLehrern","idsKlassenleitungenZuLehrern",
+            "Teams nicht erstellen", "schueler_csv", "sus_extern_csv", "lehrer_csv",
+            "ClearScreen", "show_objekt_by_id", "-ohne Funktion-", "ErgänzeSchülerAusDB",
             "ListeTeamBez","Übersicht Lernplattformen","TempHilfsfunktion","ErgänzeLehrerAusDB"
         ]
 
@@ -93,6 +63,7 @@ class ReportApp(tk.Tk):
             "idsSchuelerZuLerngruppen": "Füllt die Lerngruppen mit den zugehörigen Schüler-IDs",
             "teamBezErstellen": "Erstellt die TeamBezeichnung für die Lerngruppen\nz.B. 5a - D oder EF - M-GK1 oder AG Informatik",
             "Jahrgangsteams": "Funktion zum Erstellen von Jahrgangsteams\nz.B. für die EF ein Team mit Namen Abi2028",
+            "KursartZuordnung": "Legt pro kursartKuerzel fest, ob Lerngruppen dieser Kursart\nbeim Export als Arbeitsgruppe, Cloud#Kurs oder Cloud#Gruppe\nbehandelt werden (neues MNSpro-Cloud-Format)",
             "idsLerngruppenZuLehrern": "Füllt die Lehrer mit den zugeordneten Lerngruppen-IDs",
             "idsKlassenleitungenZuLehrern": "Füllt die Lehrer mit den zugeordneten Klassenleitungs-IDs",
             "Teams nicht erstellen": "Auswahl von Teams\naus der aktuellen Liste TeamsBez\ndie nicht erstellt werden\nsollen",
@@ -236,6 +207,14 @@ class ReportApp(tk.Tk):
                 self.report_text.see(tk.END)
             case "Jahrgangsteams":
                 self.generator.edit_jahrgangsteams(self)
+            case "KursartZuordnung":
+                self.generator.edit_kursart_zuordnung(self)
+                fehlende = self.generator.fehlende_kursart_zuordnungen()
+                if fehlende:
+                    self.report_text.insert(tk.END, f"⚠️ Noch nicht klassifiziert (kursartKuerzel): {', '.join(fehlende)}\n")
+                else:
+                    self.report_text.insert(tk.END, "✅ Alle vorkommenden kursartKuerzel sind einer Zielkategorie (Arbeitsgruppe/Kurs/Gruppe) zugeordnet.\n")
+                self.report_text.see(tk.END)
             case "ClearScreen":
                 self.report_text.delete(1.0, tk.END)
             case "ListeTeamBez":

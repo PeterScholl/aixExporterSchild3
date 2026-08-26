@@ -79,9 +79,13 @@ Reihenfolge zum gemeinsamen Abarbeiten, jeder Schritt einzeln umsetz- und testba
   - Neue Methode `get_ziel_fuer_lerngruppe(self, lg) -> str | None` (Priorität Override → Muster → kursartKuerzel) sowie `fehlende_kursart_zuordnungen(self) -> list` (Grundlage für Schritt 2).
   - Smoke-Test in `test_ziel_zuordnung.py` (`python test_ziel_zuordnung.py`, ohne pytest/DB/GUI) – läuft grün.
 
-- [ ] **Schritt 2 – Kursart-Zuordnungsdialog (Pflichtschritt)**
-  - Neue Funktion `edit_kursart_zuordnung(self, master)`: sammelt alle in `self.lerngruppen` vorkommenden `kursartKuerzel` (wie bereits die Statistik es tut, siehe [SchildMNSDataMatcher_GUI.py:539](SchildMNSDataMatcher_GUI.py#L539)), zeigt sie mit Dropdown/Radiobuttons je Zeile zur Auswahl der Zielkategorie, vorbelegt mit ggf. vorhandener `self.kursart_zuordnung`.
-  - Neuer Button im Hauptfenster + neuer `WorkflowStep` in `generator.py` (Pflichtschritt, grün bis alle vorkommenden Kürzel klassifiziert sind), Einordnung in die Button-Führungs-Kette in der README.
+- [x] **Schritt 2 – Kursart-Zuordnungsdialog (Pflichtschritt)**
+  - Neue Funktion `edit_kursart_zuordnung(self, master)` in `generator.py`: sammelt alle in `self.lerngruppen` vorkommenden `kursartKuerzel` (inkl. Anzahl betroffener Lerngruppen), zeigt sie mit einer Combobox je Zeile zur Auswahl der Zielkategorie, vorbelegt mit vorhandener `self.kursart_zuordnung` bzw. ersatzweise `KURSART_ZUORDNUNG_VORSCHLAG` (Startvorschlag, basierend auf den in `status.json` gefundenen Kürzeln: `AGGT`/`EGS1`/`FOGT` → Arbeitsgruppe, `GK`/`LK`/`PUT`/`WPII` → Kurs). Übernommen wird erst mit "Speichern & Schließen".
+  - Neuer Button **KursartZuordnung** im Hauptfenster (ersetzt einen der bisherigen „-ohne Funktion-"-Plätze) sowie neuer Pflichtschritt `WorkflowStep.KURSART_ZUORDNUNG` in der `REQUIRED_CHAIN` (grün, bis `fehlende_kursart_zuordnungen()` leer ist), eingeordnet nach TeamBezErstellen. Pflichtpfad-Kette in der README aktualisiert.
+  - Smoke-Test in `test_ziel_zuordnung.py` erweitert (prüft den neuen Pflichtschritt vor/nach vollständiger Zuordnung) – läuft grün; zusätzlich Dialog einmalig headless testweise geöffnet (keine Exceptions).
+  - **Hinweis:** Die gespeicherte Zuordnung fließt noch nicht in den eigentlichen CSV-Export ein – das folgt erst mit Schritt 7.
+  - **Nachträglich (auf Wunsch):** Button-Reihenfolge in `SchildMNSDataMatcher_GUI.py` angepasst – `KursartZuordnung` steht jetzt direkt nach `TeamBezErstellen` (Zeilenanfang der Folgezeile im Button-Grid), statt am Ende. `ToolTip` nach `ui_widgets.py` ausgelagert (von `generator.py` und `SchildMNSDataMatcher_GUI.py` gemeinsam genutzt); im Zuordnungsdialog zeigt Hover über einem `kursartKuerzel` jetzt die zugehörigen Team-Bezeichnungen (`_teambez_beispiele_je_kursart`), damit z.B. klar wird, wofür `FOGT` steht.
+  - Ab jetzt: neue, im Programm testbare Funktionen werden nicht mehr zusätzlich in eigene Testskripte gegossen – der Nutzer testet UI-nahe Schritte lieber direkt im Programm.
 
 - [ ] **Schritt 3 – Bezeichnungs-Muster (Regex)**
   - Einfacher Listen-Editor (ähnlich `edit_jahrgangsteams`) zum Pflegen von `self.bezeichnung_muster`: Pattern, Zielkategorie, Reihenfolge per Verschieben.

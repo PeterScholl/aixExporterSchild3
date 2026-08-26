@@ -64,6 +64,14 @@ Bei der Erstellung der Teamnamen wird bei Klassenteams und Jahrgangsteams geprü
 
 Hinweis: Ob der Vorgang erfolgreich oder sinnvoll war, kann dann auch z.B. über Statistik erstellen geprüft werden oder man speichert und schaut sich status.json an.
 
+### Kursart-Zuordnung (Arbeitsgruppe / Kurs / Gruppe)
+
+Für das neue MNSpro-Cloud-Format (siehe unten) muss für jede vorkommende Kursart (`kursartKuerzel`) festgelegt werden, ob Lerngruppen dieser Kursart beim Export als `Arbeitsgruppen`, `Cloud#Kurs` oder `Cloud#Gruppe` behandelt werden. Der Button **KursartZuordnung** öffnet dazu einen Dialog mit allen aktuell vorkommenden Kürzeln (inkl. Anzahl betroffener Lerngruppen) und je einem Auswahlfeld für die Zielkategorie. Als Startvorschlag ist eine Vorbelegung hinterlegt, die aber erst mit "Speichern & Schließen" übernommen wird.
+
+Der Button ist Teil der Pflicht-Button-Führung (grün, bis für alle vorkommenden Kürzel eine Zuordnung gespeichert ist).
+
+**Hinweis (Stand jetzt):** Diese Zuordnung wird aktuell erfasst und in `status.json` gespeichert, fließt aber noch nicht in `schueler_csv`/`sus_extern_csv`/`lehrer_csv` ein – das folgt mit der Umstellung der Export-Funktionen auf das neue Format (siehe `TODO.md`).
+
 ### ReferenzIDs zuweisen
 
 Den Schülern (und über den anderen Button den Lehreren) sollten für die Verwaltung in Teams und MNSpro Referenz-IDs zugewiesen werden. Leider gibt der SVWS-Server (aus Datenschutzgründen?) die oft verwendete GUID nicht über die Schnittstelle (API) raus. Daher kann sie z.B. direkt aus Schild3 exportiert werden (Interne ID und eindeutige ID). Die dabei entstandene CSV-Datei (evtl. txt in csv umbenenen) kann hier eingelesen werden und jedem Schüler wird dann entsprechend die GUID als ReferenzId für Teams bzw. MNSpro zugewisen.
@@ -153,7 +161,7 @@ Damit man auch nach einer Pause weiß, wo man stehen geblieben ist, färbt das P
 - **Gelb**: Schritte, die gerade sinnvoll wären, aber nicht zwingend nötig sind (z.B. Ergänze Schüler/Lehrer aus DB, Jahrgangsteams, Teams nicht erstellen).
 - **Unverändert**: reine Hilfs- und Kontrollbuttons (Statistik anzeigen, Serverzertifikat laden, ClearScreen, ...) sowie die Verbindungseinstellung sind nicht Teil der Führung und bleiben immer normal nutzbar.
 
-Der Pflichtpfad umfasst der Reihe nach: Abschnitts-ID holen → Lerngruppen holen → generateLookupDicts → idsSchuelerZuLerngruppen → TeamBezErstellen → Referenz-IDs für Schüler → idsLerngruppenZuLehrern → idsKlassenleitungenZuLehrern → Referenz-IDs für Lehrer → schueler_csv → sus_extern_csv → lehrer_csv.
+Der Pflichtpfad umfasst der Reihe nach: Abschnitts-ID holen → Lerngruppen holen → generateLookupDicts → idsSchuelerZuLerngruppen → TeamBezErstellen → KursartZuordnung → Referenz-IDs für Schüler → idsLerngruppenZuLehrern → idsKlassenleitungenZuLehrern → Referenz-IDs für Lehrer → schueler_csv → sus_extern_csv → lehrer_csv.
 
 Die genauen Zustände sind in `generator.py` als `WorkflowStep` (Pflichtschritte) und `OptionalStep` (situative Schritte) benannt.
 

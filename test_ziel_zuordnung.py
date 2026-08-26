@@ -1,4 +1,4 @@
-"""Manueller Smoke-Test für Schritt 1 der Cloud-Gruppen-Zuordnung (siehe TODO.md).
+"""Manueller Smoke-Test für Schritt 1 & 2 der Cloud-Gruppen-Zuordnung (siehe TODO.md).
 
 Es geht um die Zielspalte/Zielkategorie einer Lerngruppe, also die Unterscheidung, ob sie beim
 Export als Arbeitsgruppe, Cloud#Kurs oder Cloud#Gruppe behandelt wird (siehe README.md, Abschnitt
@@ -7,10 +7,13 @@ Export als Arbeitsgruppe, Cloud#Kurs oder Cloud#Gruppe behandelt wird (siehe REA
 Kein pytest nötig - einfach ausführen:
     python test_ziel_zuordnung.py
 
-Prüft get_ziel_fuer_lerngruppe() und fehlende_kursart_zuordnungen() ganz ohne
-SVWS-Server-Verbindung, DB oder GUI - Generator() kann dafür offline instanziiert werden.
+Prüft get_ziel_fuer_lerngruppe(), fehlende_kursart_zuordnungen() sowie die Einbindung des neuen
+Pflichtschritts KURSART_ZUORDNUNG in die Button-Führung - ganz ohne SVWS-Server-Verbindung, DB
+oder GUI (Generator() kann dafür offline instanziiert werden; der Dialog edit_kursart_zuordnung()
+selbst öffnet ein Tk-Fenster und wird hier bewusst nicht aufgerufen, sondern nur die Daten, die er
+liest/schreibt: self.kursart_zuordnung).
 """
-from generator import Generator
+from generator import Generator, WorkflowStep
 
 
 def check(bezeichnung, tatsaechlich, erwartet):
@@ -59,6 +62,16 @@ def main():
     g.lerngruppen = [lg_gk, lg_fs, lg_override, lg_ag, lg_unbekannt]
     fehlende = g.fehlende_kursart_zuordnungen()
     check("fehlende_kursart_zuordnungen findet XYZ", fehlende, ["XYZ"])
+
+    # 7. Schritt 2: neuer Pflichtschritt KURSART_ZUORDNUNG in der Button-Führung
+    #    (simuliert, was der Dialog edit_kursart_zuordnung() beim Speichern in self.kursart_zuordnung ablegt)
+    kursart_schritt = next(s for s in g.REQUIRED_CHAIN if s[0] == WorkflowStep.KURSART_ZUORDNUNG)
+    _step, buttons, done_fn = kursart_schritt
+    check("KursartZuordnung ist als Button in der Pflichtkette hinterlegt", buttons, ["KursartZuordnung"])
+    check("Vor vollständiger Zuordnung: Schritt nicht erledigt (XYZ fehlt noch)", done_fn(g), False)
+    g.kursart_zuordnung["XYZ"] = "kurs"  # letztes fehlendes Kürzel ergänzen
+    check("Nach vollständiger Zuordnung: Schritt erledigt", done_fn(g), True)
+    check("fehlende_kursart_zuordnungen jetzt leer", g.fehlende_kursart_zuordnungen(), [])
 
     print("\nAlle Prüfungen erfolgreich.")
 

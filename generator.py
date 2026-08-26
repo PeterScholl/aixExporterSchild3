@@ -7,6 +7,7 @@ import os
 from collections import Counter
 from enum import Enum
 from config_gui import load_config, show_config_gui, show_noteam_gui
+from ui_widgets import ToolTip
 import fetch
 import svwsapi as sv
 import config_gui
@@ -27,6 +28,21 @@ my_char_map = {
     '?': '',
     '.':''
     # Add more mappings as needed
+}
+
+# Startvorschlag für die Kursart-Zuordnung (welches kursartKuerzel gehört zu welcher
+# Zielkategorie Arbeitsgruppe/Kurs/Gruppe, siehe Generator.ziel_spalten). Nur eine Vorbelegung
+# für den Dialog edit_kursart_zuordnung(), basierend auf den bislang bekannten Kürzeln aus
+# status.json bzw. den Fallback-Listen in config_gui.py/generator.py - keine feste Regel und wird
+# nicht automatisch übernommen, sondern muss im Dialog bestätigt/angepasst und gespeichert werden.
+KURSART_ZUORDNUNG_VORSCHLAG = {
+    "AGGT": "arbeitsgruppe",
+    "EGS1": "arbeitsgruppe",
+    "FOGT": "arbeitsgruppe",
+    "GK": "kurs",
+    "LK": "kurs",
+    "PUT": "kurs",
+    "WPII": "kurs",
 }
 
 
@@ -52,6 +68,7 @@ class WorkflowStep(Enum):
     LOOKUPS_ERSTELLT = "Lookup-Dictionaries erstellt"
     SCHUELER_ZU_LERNGRUPPEN = "Schüler-IDs zu Lerngruppen zugewiesen"
     TEAMBEZ_ERSTELLT = "Team-Bezeichnungen erstellt"
+    KURSART_ZUORDNUNG = "Kursart-Zuordnung (Arbeitsgruppe/Kurs/Gruppe) vollständig"
     REFERENZ_IDS_SCHUELER = "Referenz-IDs für Schüler zugewiesen"
     LERNGRUPPEN_ZU_LEHRERN = "Lerngruppen-IDs zu Lehrern zugewiesen"
     KLASSENLEITUNG_ZU_LEHRERN = "Klassenleitungs-IDs zu Lehrern zugewiesen"
@@ -82,6 +99,8 @@ class Generator():
             lambda g: _all_have(getattr(g, "lerngruppen", []), "idsSchueler")),
         (WorkflowStep.TEAMBEZ_ERSTELLT, ["TeamBezErstellen"],
             lambda g: bool(getattr(g, "lerngruppen", [])) and all(_teambez_ok(lg) for lg in g.lerngruppen)),
+        (WorkflowStep.KURSART_ZUORDNUNG, ["KursartZuordnung"],
+            lambda g: bool(getattr(g, "lerngruppen", [])) and not g.fehlende_kursart_zuordnungen()),
         (WorkflowStep.REFERENZ_IDS_SCHUELER, ["Referenz-IDs aus File", "ReferenzIDs aus SuS-Ids"],
             lambda g: _all_have(getattr(g, "schueler", []), "referenzId")),
         (WorkflowStep.LERNGRUPPEN_ZU_LEHRERN, ["idsLerngruppenZuLehrern"],
@@ -858,6 +877,76 @@ class Generator():
 
         # initial füllen
         refresh_listbox()
+        win.wait_window()
+
+    def _teambez_beispiele_je_kursart(self, kuerzel: str, max_anzahl: int = 25) -> list:
+        """Team-Bezeichnungen (ersatzweise Bezeichnung, falls teamBez noch fehlt) aller
+        Lerngruppen mit diesem kursartKuerzel - als Grundlage für den Hover-Tooltip im
+        Kursart-Zuordnungs-Dialog, damit z.B. klar wird, wofür ein Kürzel wie "FOGT" steht."""
+        werte = sorted({
+            lg.get("teamBez") or lg.get("bezeichnung")
+            for lg in getattr(self, "lerngruppen", [])
+            if lg.get("kursartKuerzel") == kuerzel and (lg.get("teamBez") or lg.get("bezeichnung"))
+        })
+        if len(werte) > max_anzahl:
+            return werte[:max_anzahl] + [f"… und {len(werte) - max_anzahl} weitere"]
+        return werte
+
+    def edit_kursart_zuordnung(self, master):
+        """Dialog zur Pflege von self.kursart_zuordnung: legt für jedes in den Lerngruppen
+        vorkommende kursartKuerzel die Zielkategorie fest - also die Unterscheidung, ob Lerngruppen
+        mit diesem Kürzel beim Export als Arbeitsgruppe, Cloud#Kurs oder Cloud#Gruppe behandelt
+        werden (siehe self.ziel_spalten und README.md, Abschnitt "CSV-Import-Format für MNSpro
+        Cloud"). Als Startvorschlag dient KURSART_ZUORDNUNG_VORSCHLAG, sofern für ein Kürzel noch
+        keine Zuordnung gespeichert ist - übernommen wird das aber erst mit "Speichern & Schließen"."""
+        NICHT_KLASSIFIZIERT = "– nicht klassifiziert –"
+
+        alle_kuerzel = sorted({lg.get("kursartKuerzel") for lg in getattr(self, "lerngruppen", []) if lg.get("kursartKuerzel")})
+        if not alle_kuerzel:
+            messagebox.showinfo("Kursart-Zuordnung",
+                "Keine Lerngruppen mit kursartKuerzel vorhanden - bitte zuerst Lerngruppen holen.", parent=master)
+            return
+
+        anzahl = Counter(lg.get("kursartKuerzel") for lg in self.lerngruppen if lg.get("kursartKuerzel"))
+
+        win = tk.Toplevel(master)
+        win.title("Kursart-Zuordnung (Arbeitsgruppe / Kurs / Gruppe)")
+        win.transient(master)
+        win.grab_set()
+        win.columnconfigure(1, weight=1)
+
+        ttk.Label(win, text="kursartKuerzel").grid(row=0, column=0, sticky="w", padx=8, pady=(10, 4))
+        ttk.Label(win, text="Zielkategorie").grid(row=0, column=1, sticky="w", padx=8, pady=(10, 4))
+
+        ziel_werte = list(self.ziel_spalten.keys()) + [NICHT_KLASSIFIZIERT]
+        comboboxes = {}
+        for i, kuerzel in enumerate(alle_kuerzel, start=1):
+            label = ttk.Label(win, text=f"{kuerzel} ({anzahl[kuerzel]} Lerngruppen)")
+            label.grid(row=i, column=0, sticky="w", padx=8, pady=2)
+            beispiele = self._teambez_beispiele_je_kursart(kuerzel)
+            if beispiele:
+                ToolTip(label, "\n".join(beispiele))
+            cb = ttk.Combobox(win, values=ziel_werte, state="readonly", width=20)
+            vorbelegung = self.kursart_zuordnung.get(kuerzel) or KURSART_ZUORDNUNG_VORSCHLAG.get(kuerzel, NICHT_KLASSIFIZIERT)
+            cb.set(vorbelegung)
+            cb.grid(row=i, column=1, sticky="ew", padx=8, pady=2)
+            comboboxes[kuerzel] = cb
+
+        btns = ttk.Frame(win)
+        btns.grid(row=len(alle_kuerzel) + 1, column=0, columnspan=2, sticky="e", padx=8, pady=8)
+
+        def on_save_close():
+            for kuerzel, cb in comboboxes.items():
+                wert = cb.get()
+                if wert and wert != NICHT_KLASSIFIZIERT:
+                    self.kursart_zuordnung[kuerzel] = wert
+                else:
+                    self.kursart_zuordnung.pop(kuerzel, None)
+            win.destroy()
+
+        ttk.Button(btns, text="Abbrechen", command=win.destroy).pack(side="right", padx=6)
+        ttk.Button(btns, text="Speichern & Schließen", command=on_save_close).pack(side="right")
+        win.protocol("WM_DELETE_WINDOW", win.destroy)
         win.wait_window()
 
 def replace_chars(text: str, char_map: dict[str, str]) -> str:
