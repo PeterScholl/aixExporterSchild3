@@ -1023,6 +1023,153 @@ class Generator():
         win.protocol("WM_DELETE_WINDOW", win.destroy)
         win.wait_window()
 
+    def edit_bezeichnung_muster(self, master):
+        """Dialog zur Pflege von self.bezeichnung_muster: geordnete Liste von Regex-Mustern, die
+        auf die Bezeichnung einer Lerngruppe geprüft werden und - VOR der kursartKuerzel-Regel,
+        siehe get_ziel_fuer_lerngruppe() - über die Zielkategorie (Arbeitsgruppe/Cloud#Kurs/
+        Cloud#Gruppe, self.ziel_spalten) entscheiden. Reihenfolge in der Liste = Priorität, das
+        erste passende Muster gewinnt. Änderungen wirken sofort auf self.bezeichnung_muster
+        (kein separates "Speichern" nötig, analog zu edit_jahrgangsteams)."""
+        if not hasattr(self, "bezeichnung_muster") or self.bezeichnung_muster is None:
+            self.bezeichnung_muster = []
+
+        alle_bezeichnungen = [lg.get("bezeichnung") or "" for lg in getattr(self, "lerngruppen", [])]
+
+        win = tk.Toplevel(master)
+        win.title("Bezeichnungs-Muster bearbeiten (Regex)")
+        win.transient(master)
+        win.grab_set()
+        win.geometry("560x460")
+        win.columnconfigure(1, weight=1)
+
+        ttk.Label(win, text="Reihenfolge = Priorität (von oben nach unten, erstes Match gewinnt):") \
+            .grid(row=0, column=0, columnspan=2, sticky="w", padx=8, pady=(10, 2))
+
+        lb = tk.Listbox(win, height=8, exportselection=False)
+        lb.grid(row=1, column=0, columnspan=2, sticky="nsew", padx=8, pady=4)
+        win.rowconfigure(1, weight=1)
+
+        ttk.Label(win, text="Regex-Muster (gegen Bezeichnung):").grid(row=2, column=0, sticky="w", padx=8, pady=4)
+        e_pattern = ttk.Entry(win)
+        e_pattern.grid(row=2, column=1, sticky="ew", padx=8, pady=4)
+
+        ttk.Label(win, text="Zielkategorie:").grid(row=3, column=0, sticky="w", padx=8, pady=4)
+        cb_ziel = ttk.Combobox(win, values=list(self.ziel_spalten.keys()), state="readonly")
+        cb_ziel.grid(row=3, column=1, sticky="ew", padx=8, pady=4)
+
+        lbl_treffer = ttk.Label(win, text="", foreground="#555555")
+        lbl_treffer.grid(row=4, column=0, columnspan=2, sticky="w", padx=8, pady=(0, 4))
+
+        def aktualisiere_treffer(*_args):
+            """Live-Vorschau: wie viele/welche aktuellen Lerngruppen würde dieses Muster treffen -
+            zum direkten Ausprobieren im Programm, ohne extra Testskript."""
+            pattern = e_pattern.get()
+            if not pattern:
+                lbl_treffer.config(text="")
+                return
+            try:
+                treffer = sorted({b for b in alle_bezeichnungen if re.search(pattern, b)})
+            except re.error as ex:
+                lbl_treffer.config(text=f"⚠️ Ungültiges Muster: {ex}")
+                return
+            text = f"{len(treffer)} Treffer in aktuellen Lerngruppen"
+            if treffer:
+                text += f" (z.B. {', '.join(treffer[:5])})"
+            lbl_treffer.config(text=text)
+
+        e_pattern.bind("<KeyRelease>", aktualisiere_treffer)
+
+        def refresh_listbox(select_index=None):
+            lb.delete(0, tk.END)
+            for regel in self.bezeichnung_muster:
+                lb.insert(tk.END, f'{regel.get("pattern", "")!r} → {regel.get("ziel", "")}')
+            if select_index is not None and 0 <= select_index < lb.size():
+                lb.selection_clear(0, tk.END)
+                lb.selection_set(select_index)
+                lb.see(select_index)
+
+        def load_from_selection(_evt=None):
+            sel = lb.curselection()
+            if not sel:
+                return
+            regel = self.bezeichnung_muster[sel[0]]
+            e_pattern.delete(0, tk.END); e_pattern.insert(0, regel.get("pattern", ""))
+            cb_ziel.set(regel.get("ziel", ""))
+            aktualisiere_treffer()
+
+        def gueltige_eingabe():
+            pattern = e_pattern.get().strip()
+            ziel = cb_ziel.get()
+            if not pattern:
+                messagebox.showwarning("Hinweis", "Bitte ein Muster eingeben.", parent=win)
+                return None
+            if not ziel:
+                messagebox.showwarning("Hinweis", "Bitte eine Zielkategorie wählen.", parent=win)
+                return None
+            try:
+                re.compile(pattern)
+            except re.error as ex:
+                messagebox.showwarning("Ungültiges Muster", str(ex), parent=win)
+                return None
+            return pattern, ziel
+
+        def hinzufuegen():
+            eingabe = gueltige_eingabe()
+            if not eingabe:
+                return
+            pattern, ziel = eingabe
+            self.bezeichnung_muster.append({"pattern": pattern, "ziel": ziel})
+            refresh_listbox(select_index=len(self.bezeichnung_muster) - 1)
+
+        def aktualisieren():
+            sel = lb.curselection()
+            if not sel:
+                messagebox.showinfo("Hinweis", "Bitte zuerst einen Eintrag in der Liste auswählen.", parent=win)
+                return
+            eingabe = gueltige_eingabe()
+            if not eingabe:
+                return
+            pattern, ziel = eingabe
+            self.bezeichnung_muster[sel[0]] = {"pattern": pattern, "ziel": ziel}
+            refresh_listbox(select_index=sel[0])
+
+        def loeschen():
+            sel = lb.curselection()
+            if not sel:
+                return
+            del self.bezeichnung_muster[sel[0]]
+            e_pattern.delete(0, tk.END)
+            cb_ziel.set("")
+            refresh_listbox()
+
+        def verschieben(delta):
+            sel = lb.curselection()
+            if not sel:
+                return
+            i = sel[0]
+            j = i + delta
+            if 0 <= j < len(self.bezeichnung_muster):
+                self.bezeichnung_muster[i], self.bezeichnung_muster[j] = self.bezeichnung_muster[j], self.bezeichnung_muster[i]
+                refresh_listbox(select_index=j)
+
+        btns1 = ttk.Frame(win)
+        btns1.grid(row=5, column=0, columnspan=2, sticky="ew", padx=8, pady=4)
+        ttk.Button(btns1, text="Hinzufügen", command=hinzufuegen).pack(side="left", padx=2)
+        ttk.Button(btns1, text="Aktualisieren", command=aktualisieren).pack(side="left", padx=2)
+        ttk.Button(btns1, text="Löschen", command=loeschen).pack(side="left", padx=2)
+        ttk.Button(btns1, text="▲ nach oben", command=lambda: verschieben(-1)).pack(side="left", padx=2)
+        ttk.Button(btns1, text="▼ nach unten", command=lambda: verschieben(1)).pack(side="left", padx=2)
+
+        btns2 = ttk.Frame(win)
+        btns2.grid(row=6, column=0, columnspan=2, sticky="e", padx=8, pady=8)
+        ttk.Button(btns2, text="Schließen", command=win.destroy).pack(side="right")
+
+        lb.bind("<<ListboxSelect>>", load_from_selection)
+        win.protocol("WM_DELETE_WINDOW", win.destroy)
+
+        refresh_listbox()
+        win.wait_window()
+
 def replace_chars(text: str, char_map: dict[str, str]) -> str:
     for old, new in char_map.items():
         text = text.replace(old, new)

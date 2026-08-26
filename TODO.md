@@ -88,9 +88,11 @@ Reihenfolge zum gemeinsamen Abarbeiten, jeder Schritt einzeln umsetz- und testba
   - **Nachträglich (auf Wunsch):** Button-Reihenfolge in `SchildMNSDataMatcher_GUI.py` angepasst – `KursartZuordnung` steht jetzt direkt nach `TeamBezErstellen` (Zeilenanfang der Folgezeile im Button-Grid), statt am Ende. `ToolTip` nach `ui_widgets.py` ausgelagert (von `generator.py` und `SchildMNSDataMatcher_GUI.py` gemeinsam genutzt); im Zuordnungsdialog zeigt Hover über einem `kursartKuerzel` jetzt die zugehörigen Team-Bezeichnungen (`_teambez_beispiele_je_kursart`), damit z.B. klar wird, wofür `FOGT` steht.
   - Ab jetzt: neue, im Programm testbare Funktionen werden nicht mehr zusätzlich in eigene Testskripte gegossen – der Nutzer testet UI-nahe Schritte lieber direkt im Programm.
 
-- [ ] **Schritt 3 – Bezeichnungs-Muster (Regex)**
-  - Einfacher Listen-Editor (ähnlich `edit_jahrgangsteams`) zum Pflegen von `self.bezeichnung_muster`: Pattern, Zielkategorie, Reihenfolge per Verschieben.
-  - Anwendung in `get_ziel_fuer_lerngruppe` vor der `kursartKuerzel`-Regel (bereits in Schritt 1 vorgesehen, hier nur die GUI dazu).
+- [x] **Schritt 3 – Bezeichnungs-Muster (Regex)**
+  - Neuer Listen-Editor `edit_bezeichnung_muster(self, master)` in `generator.py` (Stil wie `edit_jahrgangsteams`: direkte Mutation von `self.bezeichnung_muster`, kein separates Speichern) zum Pflegen von Regex-Mustern auf die Bezeichnung → Zielkategorie. Reihenfolge = Priorität, per "▲ nach oben"/"▼ nach unten" änderbar; Hinzufügen/Aktualisieren/Löschen mit Regex-Validierung (`re.compile`, Fehlermeldung statt Absturz bei ungültigem Muster).
+  - **Live-Treffervorschau:** beim Tippen zeigt ein Label direkt, wie viele/welche aktuellen Lerngruppen das Muster träfe – zum Ausprobieren direkt im Programm, ohne Testskript.
+  - Anwendung in `get_ziel_fuer_lerngruppe` vor der `kursartKuerzel`-Regel war bereits in Schritt 1 vorgesehen und unverändert.
+  - Neuer Button **BezeichnungsMusterBearbeiten** (Utility, kein Pflichtschritt, da Muster optional/ergänzend sind) am Ende der Button-Liste ergänzt.
 
 - [ ] **Schritt 4 – Kontroll-/Vorschau-Funktion**
   - Neue Funktion (z.B. `zuordnung_uebersicht`), die je Zielkategorie die betroffenen Lerngruppen auflistet, "nicht klassifizierte" Fälle sowie doppelte Bezeichnungen über Zielkategorien hinweg warnt.
