@@ -100,10 +100,10 @@ Reihenfolge zum gemeinsamen Abarbeiten, jeder Schritt einzeln umsetz- und testba
   - Ausgabe wie bei "Statistik anzeigen": Textfeld wird geleert und neu befüllt.
   - **Nachträglich behobene Lücke:** Lerngruppen mit `kursartKuerzel = null` (typischerweise normale Fachkurse) fielen bislang überall durch (`if lg.get("kursartKuerzel")`-Filter). Jetzt eigenes Pseudo-Kürzel `KEIN_KURSARTKUERZEL = "(ohne kursartKuerzel)"` in `get_ziel_fuer_lerngruppe`, `fehlende_kursart_zuordnungen`, `edit_kursart_zuordnung` und `zuordnung_uebersicht` berücksichtigt, mit Standard-Vorschlag "Kurs" in `KURSART_ZUORDNUNG_VORSCHLAG`.
 
-- [ ] **Schritt 5 – Besitzer-Markierung (`^`) für Kursleiter**
-  - Checkbox "Besitzer markieren" in `config_gui.py` (Standard: an), Persistenz über `self.besitzer_markieren`.
-  - In `writeLuLCSV` beim Aufbau der Team-Liste aus `idsLerngruppen`: bei aktivierter Einstellung `^` voranstellen, wenn die Lehrkraft in `idsLehrer` der jeweiligen Lerngruppe steht.
-  - Kontrollhinweis auf die 100-Besitzer-Grenze bei sehr großen Gruppen (z.B. im Ergebnistext der Kontrollfunktion aus Schritt 4).
+- [x] **Schritt 5 – Besitzer-Markierung (`^`) für Kursleiter**
+  - Checkbox "Besitzer markieren" **nicht** in `config_gui.py` (das ist nur die DB-Verbindungseinstellung), sondern im bereits existierenden Einstellungen-Dialog `open_settings_window` in `SchildMNSDataMatcher_GUI.py` (dort steht auch schon "Sonderzeichen ersetzen") – Standard: an, Persistenz über `self.besitzer_markieren`.
+  - In `writeLuLCSV` (`generator.py`) beim Aufbau der Team-Liste aus `idsLerngruppen`: `^` wird vorangestellt, wenn die Lehrkraft laut `idsLehrer` der jeweiligen Lerngruppe Kursleiter ist und die Einstellung aktiv ist. Ergebnistext zeigt die Anzahl der markierten Zuordnungen.
+  - **100-Besitzer-Grenze:** direkt in `writeLuLCSV` mitgezählt (`Counter` je Team-Bezeichnung) und als Warnung im Ergebnistext ausgegeben, falls ein Team mehr als 100 als Besitzer markierte Lehrkräfte hätte – dort ist die tatsächliche Owner-Zahl bekannt, nicht in der Lerngruppen-bezogenen `zuordnung_uebersicht` aus Schritt 4.
 
 - [ ] **Schritt 6 – Jahrgangsteams auf drei Kategorien erweitern**
   - `self.jahrgangsteams` von `{jahrgang: [Namen]}` auf `{jahrgang: {"arbeitsgruppe": [...], "kurs": [...], "gruppe": [...]}}` umstellen.

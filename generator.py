@@ -788,6 +788,8 @@ class Generator():
             writer.writerow(["ReferenzId", "Vorname", "Nachname", "Klassen", "Gruppen"])  # Kopfzeile
 
             count = 0
+            countBesitzer = 0
+            besitzer_je_team = Counter()  # Team-Bezeichnung -> Anzahl mit "^" markierter Lehrkräfte (100er-Grenze, siehe MNSpro-Doku)
             lookup_lg = self.lookupDict.get("lerngruppen",{})
             lookup_klassen = self.lookupDict.get("klassen",{})
 
@@ -817,15 +819,23 @@ class Generator():
                 teams_liste = list(self.jahrgangsteams.get("Lehrer", []))
 
                 if ids_lerngruppen:
-                    for klassen_id in ids_lerngruppen:
-                        klasse = lookup_lg.get(klassen_id,{})
-                        if not klasse:
-                            ergText+=f"Lerngruppe mit {klassen_id} nicht gefunden\n"
+                    for lg_id in ids_lerngruppen:
+                        lg = lookup_lg.get(lg_id,{})
+                        if not lg:
+                            ergText+=f"Lerngruppe mit {lg_id} nicht gefunden\n"
                             continue
-                        bezeichnung = klasse.get("teamBez")
+                        bezeichnung = lg.get("teamBez")
                         if (bezeichnung not in self.noTeams):
                             if (self.replaceSpecialChars):
                                 bezeichnung = replace_chars(bezeichnung, my_char_map)
+
+                            # Besitzer-Markierung ("^"): Lehrkraft ist laut idsLehrer Kursleiter
+                            # dieser Lerngruppe - analog zur Klassenleitung oben. Über die
+                            # Einstellung "Besitzer markieren" (Datei > Einstellungen) abschaltbar.
+                            if self.besitzer_markieren and l.get("id") in lg.get("idsLehrer", []):
+                                besitzer_je_team[bezeichnung] += 1
+                                bezeichnung = "^" + bezeichnung
+                                countBesitzer += 1
 
                             teams_liste.append(bezeichnung)
                         else:
@@ -841,6 +851,14 @@ class Generator():
                 writer.writerow([referenzId, vorname, nachname, klassen, kurse])
 
         if countNoTeams > 0: ergText+=(f"ℹ️ Es wurden {countNoTeams} Verknüpfungen wegen nicht zu erstellender Teams verhindert\n")
+        if self.besitzer_markieren:
+            ergText += f"ℹ️ {countBesitzer} Lehrkraft-Lerngruppen-Zuordnungen wurden als Besitzer (\"^\") markiert.\n"
+            # MNSpro-Doku: pro Kurs/Gruppe maximal 100 Besitzer, überzählige werden automatisch zu Mitgliedern
+            zu_viele_besitzer = {name: anz for name, anz in besitzer_je_team.items() if anz > 100}
+            if zu_viele_besitzer:
+                ergText += f"⚠️ {len(zu_viele_besitzer)} Team(s) haben mehr als 100 als Besitzer markierte Lehrkräfte (MNSpro-Grenze, überzählige werden automatisch zu Mitgliedern):\n"
+                for name, anz in sorted(zu_viele_besitzer.items()):
+                    ergText += f"  {name}: {anz} Besitzer\n"
         ergText+=(f"✅ CSV-Datei 'Teacher.csv' wurde mit {count} Einträgen erstellt.\n")
         self.exportedFlags["lehrer_csv"] = True
         return ergText

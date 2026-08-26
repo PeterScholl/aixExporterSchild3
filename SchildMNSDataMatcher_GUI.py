@@ -390,6 +390,11 @@ class ReportApp(tk.Tk):
         ckButtonSonderzeichen.pack(anchor="w", padx=10, pady=5)
         ToolTip(ckButtonSonderzeichen, "Ersetzt einige Sonderzeichen nach einer festgelegten Tabelle")
 
+        boolBesitzerMarkieren = tk.BooleanVar(value=getattr(self.generator, "besitzer_markieren", True))
+        ckButtonBesitzer = tk.Checkbutton(settings_window, text="Besitzer markieren", variable=boolBesitzerMarkieren)
+        ckButtonBesitzer.pack(anchor="w", padx=10, pady=5)
+        ToolTip(ckButtonBesitzer, "Markiert Lehrkräfte bei lehrer_csv mit \"^\" als Besitzer der\nLerngruppen, die sie laut idsLehrer unterrichten (Kursleiter).\nOhne Markierung werden sie nur als Mitglied importiert.")
+
         # Combobox für Verify
         tk.Label(settings_window, text="Verify:").pack(anchor="w", padx=10, pady=(10,0))
 
@@ -414,6 +419,7 @@ class ReportApp(tk.Tk):
                 else: 
                     logic.sv.verify = logic.sv.download_server_cert()
             self.generator.replaceSpecialChars = boolReplaceSpecialChars.get()
+            self.generator.besitzer_markieren = boolBesitzerMarkieren.get()
             settings_window.destroy()
 
         tk.Button(settings_window, text="Schließen", command=on_close).pack(pady=10)        
