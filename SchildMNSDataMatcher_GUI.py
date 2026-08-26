@@ -51,7 +51,7 @@ class ReportApp(tk.Tk):
             "KursartZuordnung", "Referenz-IDs aus File", "ReferenzIDs aus SuS-Ids", "LehrerReferenzen aus File",
             "L-ReferenzIDs aus kuerzel", "Jahrgangsteams", "idsLerngruppenZuLehrern","idsKlassenleitungenZuLehrern",
             "Teams nicht erstellen", "schueler_csv", "sus_extern_csv", "lehrer_csv",
-            "ClearScreen", "show_objekt_by_id", "-ohne Funktion-", "ErgänzeSchülerAusDB",
+            "ClearScreen", "show_objekt_by_id", "LeereLerngruppenLöschen", "ErgänzeSchülerAusDB",
             "ListeTeamBez","Übersicht Lernplattformen","TempHilfsfunktion","ErgänzeLehrerAusDB"
         ]
 
@@ -74,6 +74,7 @@ class ReportApp(tk.Tk):
             "Serverzertifikat laden": "Lädt ein selbstsigniertes\nZertifikat herunter und\nspeichert es in ./server.pem",
             "ErgänzeLehrerAusDB": "Veraltet - holt ggf.\nfehlende Lehrer über\neinen alternativen\nAPI-Endpunkt",
             "ErgänzeSchülerAusDB": "holt ggf. fehlende Schüler über GET /schueler/abschnitt/{abschnittId}",
+            "LeereLerngruppenLöschen": "Löscht Lerngruppen ohne Schüler\n(z.B. in der Planungsphase eines Schuljahres hilfreich)\nBereinigt dabei auch die Verweise bei Lehrern und Schülern\n(idsLerngruppen) sowie im Lookup-Dict und bei Kursart-Overrides.\nFragt vorher zur Sicherheit nach.",
         }
         
         # Buttons in einem <x> times 4 Grid
@@ -143,6 +144,9 @@ class ReportApp(tk.Tk):
                 self.report_text.see(tk.END)
             case "ErgänzeSchülerAusDB":
                 self.report_text.insert(tk.END,self.generator.ergaenzeSchueler())
+                self.report_text.see(tk.END)
+            case "LeereLerngruppenLöschen":
+                self.report_text.insert(tk.END, self.generator.loescheLeereLerngruppen(self))
                 self.report_text.see(tk.END)
             case "Statistik anzeigen":
                 self.show_statistik()

@@ -3,6 +3,7 @@
 - [x] f-Strings finden, bei denen Anführungszeichen "doppelt" bzw. gleich sind (z.B. verschachtelte `f"...{x['y']}..."` mit gleichem Anführungszeichen-Typ innen und außen) – betraf `generator.py:406` und `generator.py:412` (Aufrufe mit `art="jahrgaenge"`/`art="klassen"` innerhalb eines f-Strings mit doppelten Anführungszeichen; vor Python 3.12 ein SyntaxError, z.B. auf Windows-Builds mit älterem Python). Behoben durch einfache Anführungszeichen innen.
 - [ ] Umstellung auf neues Format mit `Arbeitsgruppen;Cloud#Kurs;Cloud#Gruppe` (Format siehe [README.md](README.md#csv-import-format-für-mnspro-cloud))
 - [ ] Ermittlung, welche Lerngruppe welcher Zielspalte (Arbeitsgruppe/Kurs/Gruppe) zugeordnet wird – Detailplanung siehe unten
+- [x] "Leere Lerngruppen löschen" – neuer Button `LeereLerngruppenLöschen` (Utility, kein Pflichtschritt), löscht Lerngruppen ohne Schüler und bereinigt Verweise bei Lehrern/Schülern (`idsLerngruppen`), im Lookup-Dict und bei verwaisten Kursart-Overrides. Methode `loescheLeereLerngruppen()` in `generator.py`, mit Sicherheitsabfrage (Vorschau der betroffenen Team-Bezeichnungen) vor dem Löschen. Voraussetzung: `idsSchuelerZuLerngruppen` muss vorher gelaufen sein, sonst FEHLER-Meldung statt Fehlklassifikation. Von Peter selbst im Programm getestet.
 
 ## Detailplanung: Zuordnung Lerngruppe → Arbeitsgruppe / Kurs / Gruppe
 

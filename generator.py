@@ -400,7 +400,81 @@ class Generator():
                         count+=1
 
         return count
-    
+
+    def loescheLeereLerngruppen(self, master=None) -> str:
+        """Entfernt alle Lerngruppen ohne Schüler (idsSchueler leer oder fehlend) aus den Daten und
+        bereinigt dabei alle Verweise auf ihre ID in anderen Elementen:
+        - self.lookupDict["lerngruppen"]
+        - self.lehrer[*]["idsLerngruppen"]
+        - self.schueler[*]["idsLerngruppen"]
+        - self.zuordnung_overrides (manuelle Kursart-Overrides, siehe TODO.md Schritt 2)
+
+        Voraussetzung: idsSchuelerZuLerngruppen wurde bereits ausgeführt - sonst hätte noch keine
+        Lerngruppe ein idsSchueler-Feld und es würde fälschlich alles als "leer" gelten.
+
+        master: Elternfenster für die Sicherheitsabfrage vor dem Löschen (messagebox); ohne master
+        wird ohne Rückfrage gelöscht (z.B. für Tests/Konsolennutzung)."""
+        alle_lerngruppen = getattr(self, "lerngruppen", [])
+        if not alle_lerngruppen:
+            return "Keine Lerngruppen vorhanden.\n"
+        if not any("idsSchueler" in lg for lg in alle_lerngruppen):
+            return "FEHLER: Noch keine Lerngruppe hat ein Feld idsSchueler - bitte zuerst idsSchuelerZuLerngruppen ausführen.\n"
+
+        leere = [lg for lg in alle_lerngruppen if not lg.get("idsSchueler")]
+        if not leere:
+            return "Keine leeren Lerngruppen gefunden.\n"
+
+        namen = sorted(lg.get("teamBez") or lg.get("bezeichnung") or str(lg.get("id")) for lg in leere)
+        if master is not None:
+            vorschau = "\n".join(namen[:15]) + (f"\n... und {len(namen)-15} weitere" if len(namen) > 15 else "")
+            if not messagebox.askyesno("Leere Lerngruppen löschen",
+                    f"{len(leere)} Lerngruppen ohne Schüler gefunden:\n\n{vorschau}\n\nWirklich löschen?", parent=master):
+                return "Abgebrochen - keine Lerngruppen gelöscht.\n"
+
+        leere_ids = {lg.get("id") for lg in leere}
+
+        # aus der Hauptliste entfernen
+        self.lerngruppen = [lg for lg in alle_lerngruppen if lg.get("id") not in leere_ids]
+
+        # aus dem Lookup-Dict entfernen (falls vorhanden)
+        lookup_lg = getattr(self, "lookupDict", {}).get("lerngruppen")
+        if lookup_lg:
+            for lg_id in leere_ids:
+                lookup_lg.pop(lg_id, None)
+
+        # Verweise bei Lehrern bereinigen
+        anz_lehrer_verweise = 0
+        for lehrer in getattr(self, "lehrer", []):
+            ids = lehrer.get("idsLerngruppen")
+            if ids:
+                neu = [i for i in ids if i not in leere_ids]
+                anz_lehrer_verweise += len(ids) - len(neu)
+                lehrer["idsLerngruppen"] = neu
+
+        # Verweise bei Schülern bereinigen
+        anz_schueler_verweise = 0
+        for schueler in getattr(self, "schueler", []):
+            ids = schueler.get("idsLerngruppen")
+            if ids:
+                neu = [i for i in ids if i not in leere_ids]
+                anz_schueler_verweise += len(ids) - len(neu)
+                schueler["idsLerngruppen"] = neu
+
+        # verwaiste manuelle Kursart-Overrides bereinigen (Schritt 2, siehe TODO.md)
+        anz_overrides = 0
+        for lg_id in list(self.zuordnung_overrides.keys()):
+            if lg_id in leere_ids:
+                del self.zuordnung_overrides[lg_id]
+                anz_overrides += 1
+
+        beispiele = ", ".join(namen[:10]) + (f", ... und {len(namen)-10} weitere" if len(namen) > 10 else "")
+        resultText = f"🗑️ {len(leere)} leere Lerngruppen gelöscht: {beispiele}\n"
+        resultText += f"Bereinigte Verweise: {anz_lehrer_verweise} bei Lehrern, {anz_schueler_verweise} bei Schülern"
+        if anz_overrides:
+            resultText += f", {anz_overrides} verwaiste Kursart-Overrides entfernt"
+        resultText += "\n"
+        return resultText
+
     def addTeamBezZuLerngruppen(self):
         """Jeder Lerngruppe wird aufgrund der zugeordneten Schülermenge eine Bezeichnug mit Klasse, Jahrgang oder ohne
         prefix zugeordnet. Zudem erhält die Lerngruppe auf einen Jahrgang"""
