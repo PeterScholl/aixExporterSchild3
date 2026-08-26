@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import filedialog, ttk, messagebox
 import csv
+import re
 import sys
 import os
 from collections import Counter
@@ -152,6 +153,17 @@ class Generator():
         self.noTeams = [] #Liste von Teambezeichnungen, die nicht erstellt werden sollen
         self.replaceSpecialChars = True # Sonderzeichen in Gruppen oder Namen ersetzen
         self.exportedFlags = {} # merkt sich für die Button-Führung, welche CSV-Exporte bereits erfolgreich liefen
+
+        # Zuordnung Lerngruppe -> Zielkategorie fürs neue MNSpro-Cloud-Format (siehe TODO.md).
+        # "Zielspalte"/"Zielkategorie" meint hier immer die Unterscheidung zwischen den drei
+        # CSV-Spalten Arbeitsgruppen, Cloud#Kurs und Cloud#Gruppe (siehe README.md, Abschnitt
+        # "CSV-Import-Format für MNSpro Cloud"). Zentrale Stelle Ziel-Schlüssel -> CSV-Spaltenname,
+        # damit z.B. ein Wegfall von "Arbeitsgruppen" in MNSpro nur hier angepasst werden muss.
+        self.ziel_spalten = {"arbeitsgruppe": "Arbeitsgruppen", "kurs": "Cloud#Kurs", "gruppe": "Cloud#Gruppe"}
+        self.kursart_zuordnung = {}       # {kursartKuerzel: Ziel-Schlüssel}
+        self.bezeichnung_muster = []      # [{"pattern": regex-str, "ziel": Ziel-Schlüssel}, ...], erstes Match gewinnt
+        self.zuordnung_overrides = {}     # {lerngruppen_id: Ziel-Schlüssel}, höchste Priorität
+        self.besitzer_markieren = True    # Kursleiter (idsLehrer) beim Export als Besitzer ("^") markieren
         sv.setConfig(self.base_url, (self.username, self.password))
         if os.path.exists("server.pem"):
             sv.verify="server.pem"
@@ -425,10 +437,51 @@ class Generator():
             else: #kursartkuerzel gibt es nicht
                 resultText+= f'Kein Kursartkuerzel bei {lg.get("id",lg)} - Wert {kursartKuerzel}\n'
 
-        resultText+=f'Es wurden {count} Teambezeichnungen bei insgesamt {countlg} Lerngruppen zugeordnet\n' 
+        resultText+=f'Es wurden {count} Teambezeichnungen bei insgesamt {countlg} Lerngruppen zugeordnet\n'
         resultText+=f'Davon bekamen {countjg} nur den Jahrgang als Prefix und {countno} kein Prefix\n'
         return resultText
-    
+
+    def get_ziel_fuer_lerngruppe(self, lg: dict) -> str | None:
+        """Ermittelt die Zielkategorie (Schlüssel aus self.ziel_spalten, z.B. "kurs") für eine
+        Lerngruppe, für das neue MNSpro-Cloud-Exportformat. "Zielkategorie" meint die
+        Unterscheidung zwischen den drei CSV-Spalten Arbeitsgruppen / Cloud#Kurs / Cloud#Gruppe.
+
+        Prioritätsreihenfolge:
+        1. manueller Einzel-Override über die Lerngruppen-ID (self.zuordnung_overrides)
+        2. Bezeichnungs-Muster (Regex, in Reihenfolge geprüft; erstes Match gewinnt)
+        3. kursartKuerzel-Zuordnungstabelle (self.kursart_zuordnung)
+
+        Liefert None, wenn keine der drei Stufen zutrifft (= noch nicht klassifiziert).
+        """
+        lg_id = lg.get("id")
+        if lg_id is not None and lg_id in self.zuordnung_overrides:
+            return self.zuordnung_overrides[lg_id]
+
+        bezeichnung = lg.get("bezeichnung") or ""
+        for regel in self.bezeichnung_muster:
+            pattern = regel.get("pattern", "")
+            if not pattern:
+                continue
+            try:
+                if re.search(pattern, bezeichnung):
+                    return regel.get("ziel")
+            except re.error:
+                continue  # ungültiges Muster wird ignoriert statt das Programm abzubrechen
+
+        kursartKuerzel = lg.get("kursartKuerzel")
+        if kursartKuerzel is not None and kursartKuerzel in self.kursart_zuordnung:
+            return self.kursart_zuordnung[kursartKuerzel]
+
+        return None
+
+    def fehlende_kursart_zuordnungen(self) -> list:
+        """Liefert alle in self.lerngruppen vorkommenden kursartKuerzel (sortiert), für die noch
+        keine Zielkategorie (Arbeitsgruppe/Kurs/Gruppe, siehe self.ziel_spalten) in
+        self.kursart_zuordnung hinterlegt ist. Grundlage für den in Schritt 2 geplanten
+        Pflicht-Dialog zur Kursart-Zuordnung."""
+        vorhandene = {lg.get("kursartKuerzel") for lg in getattr(self, "lerngruppen", []) if lg.get("kursartKuerzel")}
+        return sorted(vorhandene - set(self.kursart_zuordnung.keys()))
+
     def get_klasse_von_schueler(self, schueler_id: int) -> str | None:
         # Schüler nachschlagen
         schueler = self.lookupDict.get("schueler", {}).get(schueler_id)

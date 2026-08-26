@@ -74,10 +74,10 @@ Daraus ergibt sich folgende **Prioritätsreihenfolge** bei der Zuordnung einer L
 
 Reihenfolge zum gemeinsamen Abarbeiten, jeder Schritt einzeln umsetz- und testbar. Persistenz ist unkompliziert, da `status.json` generisch über `obj.__dict__` gespeichert/geladen wird ([SchildMNSDataMatcher_GUI.py:266](SchildMNSDataMatcher_GUI.py#L266) `save_object_to_json`, [:297](SchildMNSDataMatcher_GUI.py#L297) `load_object_from_json`) – neue `self.*`-Attribute in `Generator.__init__` werden also automatisch mitgespeichert.
 
-- [ ] **Schritt 1 – Datenmodell & Zuordnungslogik in `generator.py`**
-  - Neue Attribute in `Generator.__init__`: `self.ziel_spalten` (Ziel-Schlüssel → CSV-Spaltenname, s.o.), `self.kursart_zuordnung` (`{kursartKuerzel: ziel}`), `self.bezeichnung_muster` (geordnete Liste `[{"pattern": ..., "ziel": ...}, ...]`), `self.zuordnung_overrides` (`{lerngruppen_id: ziel}`), `self.besitzer_markieren = True`.
-  - Neue Methode `get_ziel_fuer_lerngruppe(self, lg) -> str | None`, die die drei Prioritätsstufen (Override → Muster → kursartKuerzel) auswertet und `None` liefert, falls nichts passt.
-  - Rein interne Logik, noch keine GUI – gut isoliert testbar.
+- [x] **Schritt 1 – Datenmodell & Zuordnungslogik in `generator.py`**
+  - Neue Attribute in `Generator.__init__`: `self.ziel_spalten`, `self.kursart_zuordnung`, `self.bezeichnung_muster`, `self.zuordnung_overrides`, `self.besitzer_markieren = True`.
+  - Neue Methode `get_ziel_fuer_lerngruppe(self, lg) -> str | None` (Priorität Override → Muster → kursartKuerzel) sowie `fehlende_kursart_zuordnungen(self) -> list` (Grundlage für Schritt 2).
+  - Smoke-Test in `test_ziel_zuordnung.py` (`python test_ziel_zuordnung.py`, ohne pytest/DB/GUI) – läuft grün.
 
 - [ ] **Schritt 2 – Kursart-Zuordnungsdialog (Pflichtschritt)**
   - Neue Funktion `edit_kursart_zuordnung(self, master)`: sammelt alle in `self.lerngruppen` vorkommenden `kursartKuerzel` (wie bereits die Statistik es tut, siehe [SchildMNSDataMatcher_GUI.py:539](SchildMNSDataMatcher_GUI.py#L539)), zeigt sie mit Dropdown/Radiobuttons je Zeile zur Auswahl der Zielkategorie, vorbelegt mit ggf. vorhandener `self.kursart_zuordnung`.
