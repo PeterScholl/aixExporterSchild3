@@ -176,7 +176,11 @@ class Generator():
         self.svws_abschnitts_id = None
         self.kursarten_ohne_klasse = []
         self.lookupDict = {} # Dictionaries, die zur jeweiligen ID einen Verweis auf das zugehörige Objekt liefern
-        self.jahrgangsteams = {"Lehrer": ["*"]} #Sicherstellen, dass dieses Attribut existiert
+        # {jahrgang: {"arbeitsgruppe": [...], "kurs": [...], "gruppe": [...]}} - je Zielkategorie
+        # (siehe self.ziel_spalten) eine Liste zusätzlicher Team-Namen für diesen Jahrgang.
+        # "*" ist laut MNSpro-Doku der Platzhalter für bereits vorhandene Arbeitsgruppen, daher
+        # unter "arbeitsgruppe" beim Sonderfall "Lehrer" (gilt für alle Lehrkräfte).
+        self.jahrgangsteams = {"Lehrer": {"arbeitsgruppe": ["*"], "kurs": [], "gruppe": []}}
         self.noTeams = [] #Liste von Teambezeichnungen, die nicht erstellt werden sollen
         self.replaceSpecialChars = True # Sonderzeichen in Gruppen oder Namen ersetzen
         self.exportedFlags = {} # merkt sich für die Button-Führung, welche CSV-Exporte bereits erfolgreich liefen
@@ -715,18 +719,22 @@ class Generator():
     def writeSuSCSV(self, statusList = [2], filename="Student.csv"): # Status 2 - aktiv, 6 - extern
         ergText = ""
         countNoTeams = 0
+        countNichtKlassifiziert = 0
+        nicht_klassifiziert_beispiele = set()
         # Voraussetzungen prüfen (ReferenzID vorhanden, TeamsBez in den Lerngruppen)
         if not all("referenzId" in schueler for schueler in getattr(self,"schueler",{})):
             return "Keine Schüler vorhanden oder nicht alle haben eine referenzId\n"
         if not all("teamBez" in lerngruppe for lerngruppe in getattr(self,"lerngruppen",{})):
             return "Nicht alle Lerngruppen haben eine Teams-Bezeichnung (key: teamBez)\n"
+        self.normalisiere_jahrgangsteams()
         with open(filename, mode="w", newline="", encoding="utf-8") as csvfile:
             writer = csv.writer(csvfile, delimiter=";")
-            # Original Kopfzeile: ReferenzId;Vorname;Nachname;Klasse;Gruppen
+            # Neues MNSpro-Cloud-Format (siehe README.md, Abschnitt "CSV-Import-Format für MNSpro
+            # Cloud"): statt einer Gruppen-Spalte je eine Spalte pro Zielkategorie (self.ziel_spalten)
             if (statusList != [2]):
-                writer.writerow(["ReferenzId", "Vorname", "Nachname", "Klassen", "Gruppen"])  # Kopfzeile
+                writer.writerow(["ReferenzId", "Vorname", "Nachname", "Klassen"] + list(self.ziel_spalten.values()))  # Kopfzeile
             else:
-                writer.writerow(["ReferenzId", "Vorname", "Nachname", "Klasse", "Gruppen"])  # Kopfzeile
+                writer.writerow(["ReferenzId", "Vorname", "Nachname", "Klasse"] + list(self.ziel_spalten.values()))  # Kopfzeile
 
             count = 0
             lookup_lg = self.lookupDict.get("lerngruppen",{})
@@ -744,8 +752,9 @@ class Generator():
                 jahrgang = self.get_jahrgang_von_schueler(s.get("id")) # für Jahrgangsteams
                 ids_lerngruppen = s.get("idsLerngruppen", [])
 
-                # TeamsListe wird mit der Jahrgansliste Initialisiert
-                teams_liste = list(self.jahrgangsteams.get(jahrgang, []))
+                # Team-Listen je Zielkategorie, mit den Jahrgangsteams vorbelegt
+                jahrgangs_eintrag = self.jahrgangsteams.get(jahrgang, {})
+                teams_je_ziel = {ziel: list(jahrgangs_eintrag.get(ziel, [])) for ziel in self.ziel_spalten}
 
                 if ids_lerngruppen:
                     for lg_id in ids_lerngruppen:
@@ -755,21 +764,30 @@ class Generator():
                             continue
                         bezeichnung = lg.get("teamBez")
                         if (bezeichnung not in self.noTeams):
+                            ziel = self.get_ziel_fuer_lerngruppe(lg)
+                            if ziel is None:
+                                countNichtKlassifiziert += 1
+                                nicht_klassifiziert_beispiele.add(bezeichnung)
+                                continue
                             if (self.replaceSpecialChars):
                                 bezeichnung = replace_chars(bezeichnung, my_char_map)
-                            teams_liste.append(bezeichnung)
+                            teams_je_ziel.setdefault(ziel, []).append(bezeichnung)
                         else:
                             countNoTeams+=1
                 else:
                     ergText+=f"⚠️  {nachname}, {vorname} ({klasse}) hat keine Lerngruppe\n"
 
-                kurse = "|".join(teams_liste)
+                zielspalten_werte = ["|".join(teams_je_ziel.get(ziel, [])) for ziel in self.ziel_spalten]
                 count += 1
                 if (self.replaceSpecialChars):
                     nachname = replace_chars(nachname, my_char_map)
                     vorname = replace_chars(vorname, my_char_map)
-                writer.writerow([referenzId, vorname, nachname, klasse, kurse])
+                writer.writerow([referenzId, vorname, nachname, klasse] + zielspalten_werte)
         if countNoTeams > 0: ergText+=(f"ℹ️ Es wurden {countNoTeams} Verknüpfungen wegen nicht zu erstellender Teams verhindert\n")
+        if countNichtKlassifiziert > 0:
+            beispiele = ", ".join(sorted(nicht_klassifiziert_beispiele)[:10])
+            ergText += (f"⚠️ {countNichtKlassifiziert} Verknüpfungen wegen nicht klassifizierter Lerngruppen "
+                        f"übersprungen (z.B. {beispiele}) - siehe ZuordnungUebersicht/KursartZuordnung\n")
         ergText+=(f"✅ CSV-Datei '{filename}' wurde mit {count} Einträgen erstellt.\n")
         self.exportedFlags["sus_extern_csv" if filename == "StudentExternal.csv" else "schueler_csv"] = True
         return ergText
@@ -777,21 +795,26 @@ class Generator():
     def writeLuLCSV(self):
         ergText = ""
         countNoTeams = 0
+        countNichtKlassifiziert = 0
+        nicht_klassifiziert_beispiele = set()
         # Voraussetzungen prüfen (ReferenzID vorhanden, TeamsBez in den Lerngruppen)
         if not all("referenzId" in lehrer for lehrer in getattr(self,"lehrer",{})):
             return "Keine Lehrer vorhanden oder nicht alle haben eine referenzId\n"
         if not all("teamBez" in lerngruppe for lerngruppe in getattr(self,"lerngruppen",{})):
             return "Nicht alle Lerngruppen haben eine Teams-Bezeichnung (key: teamBez)\n"
+        self.normalisiere_jahrgangsteams()
         with open("Teacher.csv", mode="w", newline="", encoding="utf-8") as csvfile:
             writer = csv.writer(csvfile, delimiter=";")
-            # Original Kopfzeile: ReferenzId;Vorname;Nachname;Klassen;Gruppen
-            writer.writerow(["ReferenzId", "Vorname", "Nachname", "Klassen", "Gruppen"])  # Kopfzeile
+            # Neues MNSpro-Cloud-Format (siehe README.md, Abschnitt "CSV-Import-Format für MNSpro
+            # Cloud"): statt einer Gruppen-Spalte je eine Spalte pro Zielkategorie (self.ziel_spalten)
+            writer.writerow(["ReferenzId", "Vorname", "Nachname", "Klassen"] + list(self.ziel_spalten.values()))  # Kopfzeile
 
             count = 0
             countBesitzer = 0
             besitzer_je_team = Counter()  # Team-Bezeichnung -> Anzahl mit "^" markierter Lehrkräfte (100er-Grenze, siehe MNSpro-Doku)
             lookup_lg = self.lookupDict.get("lerngruppen",{})
             lookup_klassen = self.lookupDict.get("klassen",{})
+            jahrgangs_eintrag_lehrer = self.jahrgangsteams.get("Lehrer", {})
 
             for l in getattr(self,"lehrer",{}):
                 referenzId = l.get("referenzId")
@@ -815,8 +838,8 @@ class Generator():
 
                 klassen = "|".join(klassen_liste)
 
-                # TeamsListe wird mit der Jahrgansliste "Lehrer" Initialisiert
-                teams_liste = list(self.jahrgangsteams.get("Lehrer", []))
+                # Team-Listen je Zielkategorie, mit den Jahrgangsteams "Lehrer" vorbelegt
+                teams_je_ziel = {ziel: list(jahrgangs_eintrag_lehrer.get(ziel, [])) for ziel in self.ziel_spalten}
 
                 if ids_lerngruppen:
                     for lg_id in ids_lerngruppen:
@@ -826,6 +849,12 @@ class Generator():
                             continue
                         bezeichnung = lg.get("teamBez")
                         if (bezeichnung not in self.noTeams):
+                            ziel = self.get_ziel_fuer_lerngruppe(lg)
+                            if ziel is None:
+                                countNichtKlassifiziert += 1
+                                nicht_klassifiziert_beispiele.add(bezeichnung)
+                                continue
+
                             if (self.replaceSpecialChars):
                                 bezeichnung = replace_chars(bezeichnung, my_char_map)
 
@@ -837,20 +866,24 @@ class Generator():
                                 bezeichnung = "^" + bezeichnung
                                 countBesitzer += 1
 
-                            teams_liste.append(bezeichnung)
+                            teams_je_ziel.setdefault(ziel, []).append(bezeichnung)
                         else:
                             countNoTeams += 1
                 else:
                     ergText+=f"⚠️  {nachname}, {vorname} hat keine Lerngruppe\n"
 
-                kurse = "|".join(teams_liste)
+                zielspalten_werte = ["|".join(teams_je_ziel.get(ziel, [])) for ziel in self.ziel_spalten]
                 count += 1
                 if (self.replaceSpecialChars):
                     nachname = replace_chars(nachname, my_char_map)
                     vorname = replace_chars(vorname, my_char_map)
-                writer.writerow([referenzId, vorname, nachname, klassen, kurse])
+                writer.writerow([referenzId, vorname, nachname, klassen] + zielspalten_werte)
 
         if countNoTeams > 0: ergText+=(f"ℹ️ Es wurden {countNoTeams} Verknüpfungen wegen nicht zu erstellender Teams verhindert\n")
+        if countNichtKlassifiziert > 0:
+            beispiele = ", ".join(sorted(nicht_klassifiziert_beispiele)[:10])
+            ergText += (f"⚠️ {countNichtKlassifiziert} Verknüpfungen wegen nicht klassifizierter Lerngruppen "
+                        f"übersprungen (z.B. {beispiele}) - siehe ZuordnungUebersicht/KursartZuordnung\n")
         if self.besitzer_markieren:
             ergText += f"ℹ️ {countBesitzer} Lehrkraft-Lerngruppen-Zuordnungen wurden als Besitzer (\"^\") markiert.\n"
             # MNSpro-Doku: pro Kurs/Gruppe maximal 100 Besitzer, überzählige werden automatisch zu Mitgliedern
@@ -940,10 +973,37 @@ class Generator():
         print(f"{len(result['mapping'])} Referenz-IDs zugewiesen.")
         return f"{count_ref} Referenz-IDs zugewisen - {count_id} mal die {idBez} als Referenz\n"
 
+    def normalisiere_jahrgangsteams(self) -> str:
+        """Migriert self.jahrgangsteams vom alten Format ({jahrgang: [Namen]}) auf das neue
+        Format ({jahrgang: {"arbeitsgruppe": [...], "kurs": [...], "gruppe": [...]}}, siehe
+        self.ziel_spalten). "*" (Platzhalter für bereits vorhandene Arbeitsgruppen laut
+        MNSpro-Doku) landet dabei in "arbeitsgruppe", alle anderen Einträge (übliche Team-Namen
+        wie "Abi28") in "kurs". Idempotent - kann gefahrlos mehrfach aufgerufen werden, z.B. nach
+        jedem Laden einer alten status.json. Gibt einen Hinweistext zurück, wenn tatsächlich
+        migriert wurde, sonst "" (Schritt 6, siehe TODO.md)."""
+        migriert = []
+        for jahrgang, wert in list(self.jahrgangsteams.items()):
+            if isinstance(wert, list):
+                self.jahrgangsteams[jahrgang] = {
+                    "arbeitsgruppe": [x for x in wert if x == "*"],
+                    "kurs": [x for x in wert if x != "*"],
+                    "gruppe": [],
+                }
+                migriert.append(jahrgang)
+        if migriert:
+            return f"ℹ️ Jahrgangsteams für {', '.join(sorted(migriert))} auf das neue Format (Arbeitsgruppe/Kurs/Gruppe) migriert.\n"
+        return ""
+
     def edit_jahrgangsteams(self, master):
-        # sicherstellen, dass das Attribut existiert
+        """Dialog zur Pflege von self.jahrgangsteams: pro Jahrgang (und dem Sonderfall "Lehrer",
+        der allen Lehrkräften zugeordnet wird) werden zusätzliche Team-Namen für jede
+        Zielkategorie (Arbeitsgruppe/Cloud#Kurs/Cloud#Gruppe, siehe self.ziel_spalten) gepflegt -
+        z.B. für die EF ein Cloud#Kurs "Abi28". Migriert dabei automatisch noch nicht umgestellte,
+        alte flache Listen (Schritt 6, siehe TODO.md)."""
+        # sicherstellen, dass das Attribut existiert und im neuen Format vorliegt
         if not hasattr(self, "jahrgangsteams") or self.jahrgangsteams is None:
             self.jahrgangsteams = {}
+        self.normalisiere_jahrgangsteams()
 
         win = tk.Toplevel(master)
         win.title("Jahrgangsteams bearbeiten")
@@ -951,26 +1011,34 @@ class Generator():
         win.grab_set()
         win.columnconfigure(1, weight=1)
         # größere Startgröße
-        win.geometry("400x300")
+        win.geometry("440x460")
 
         # Widgets
         ttk.Label(win, text="Jahrgang (z. B. 09, EF):").grid(row=0, column=0, sticky="w", padx=8, pady=(10,4))
         e_key = ttk.Entry(win, width=10)
         e_key.grid(row=0, column=1, sticky="w", padx=8, pady=(10,4))
 
-        ttk.Label(win, text="Teams (kommagetrennt):").grid(row=1, column=0, sticky="nw", padx=8, pady=4)
-        e_vals = ttk.Entry(win)
-        e_vals.grid(row=1, column=1, sticky="ew", padx=8, pady=4)
+        # Ein Eingabefeld je Zielkategorie (dynamisch aus self.ziel_spalten, damit sich der Dialog
+        # automatisch anpasst, falls sich die Zielkategorien künftig ändern sollten)
+        e_kategorien = {}  # Ziel-Schlüssel -> Entry-Widget
+        row = 1
+        for ziel, spalte in self.ziel_spalten.items():
+            ttk.Label(win, text=f"{spalte} (kommagetrennt):").grid(row=row, column=0, sticky="nw", padx=8, pady=4)
+            e = ttk.Entry(win)
+            e.grid(row=row, column=1, sticky="ew", padx=8, pady=4)
+            e_kategorien[ziel] = e
+            row += 1
 
         # Liste vorhandener Jahrgänge
-        ttk.Label(win, text="Vorhandene Jahrgänge:").grid(row=2, column=0, sticky="nw", padx=8, pady=4)
+        ttk.Label(win, text="Vorhandene Jahrgänge:").grid(row=row, column=0, sticky="nw", padx=8, pady=4)
         lb = tk.Listbox(win, height=8, exportselection=False)
-        lb.grid(row=2, column=1, sticky="nsew", padx=8, pady=4)
-        win.rowconfigure(2, weight=1)
+        lb.grid(row=row, column=1, sticky="nsew", padx=8, pady=4)
+        win.rowconfigure(row, weight=1)
+        row += 1
 
         # Buttons
         btns = ttk.Frame(win)
-        btns.grid(row=3, column=0, columnspan=2, sticky="e", padx=8, pady=8)
+        btns.grid(row=row, column=0, columnspan=2, sticky="e", padx=8, pady=8)
         b_add    = ttk.Button(btns, text="Neu/Übernehmen")
         b_delete = ttk.Button(btns, text="Löschen")
         b_close  = ttk.Button(btns, text="Schließen")
@@ -988,10 +1056,15 @@ class Generator():
                     seen.add(v); out.append(v)
             return out
 
+        def zusammenfassung(key: str) -> str:
+            eintrag = self.jahrgangsteams.get(key, {})
+            teile = [f"{ziel}: {', '.join(eintrag.get(ziel, []))}" for ziel in self.ziel_spalten if eintrag.get(ziel)]
+            return key + (f"  ({'; '.join(teile)})" if teile else "")
+
         def refresh_listbox(select_key: str | None = None):
             lb.delete(0, tk.END)
             for k in sorted(self.jahrgangsteams.keys()):
-                lb.insert(tk.END, k)
+                lb.insert(tk.END, zusammenfassung(k))
             if select_key and select_key in self.jahrgangsteams:
                 idx = sorted(self.jahrgangsteams.keys()).index(select_key)
                 lb.selection_clear(0, tk.END)
@@ -1004,16 +1077,17 @@ class Generator():
                 return
             key = sorted(self.jahrgangsteams.keys())[sel[0]]
             e_key.delete(0, tk.END); e_key.insert(0, key)
-            vals = self.jahrgangsteams.get(key, [])
-            e_vals.delete(0, tk.END); e_vals.insert(0, ", ".join(vals))
+            eintrag = self.jahrgangsteams.get(key, {})
+            for ziel, e in e_kategorien.items():
+                e.delete(0, tk.END)
+                e.insert(0, ", ".join(eintrag.get(ziel, [])))
 
         def add_or_update():
             key = e_key.get().strip()
             if not key:
                 messagebox.showwarning("Hinweis", "Bitte Jahrgang eingeben.", parent=win)
                 return
-            vals = normalize_values(e_vals.get())
-            self.jahrgangsteams[key] = vals
+            self.jahrgangsteams[key] = {ziel: normalize_values(e.get()) for ziel, e in e_kategorien.items()}
             refresh_listbox(select_key=key)
 
         def delete_selected():
@@ -1027,7 +1101,8 @@ class Generator():
             if messagebox.askyesno("Löschen", f"Jahrgang '{key}' wirklich löschen?", parent=win):
                 del self.jahrgangsteams[key]
                 e_key.delete(0, tk.END)
-                e_vals.delete(0, tk.END)
+                for e in e_kategorien.values():
+                    e.delete(0, tk.END)
                 refresh_listbox()
 
         # Bindings

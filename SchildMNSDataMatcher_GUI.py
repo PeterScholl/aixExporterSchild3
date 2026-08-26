@@ -283,6 +283,7 @@ class ReportApp(tk.Tk):
         self.report_text.insert(tk.END,"Konfiguration geladen!\nGeneriere Lookup Dictionaries ...")
         self.generator.generateLookups()
         self.report_text.insert(tk.END," DONE\n")
+        self.report_text.insert(tk.END, self.generator.normalisiere_jahrgangsteams())
         self.refresh_button_highlighting()
 
     def load_object_from_json(self, cls, filename):

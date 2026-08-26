@@ -1,8 +1,8 @@
 # TODO
 
 - [x] f-Strings finden, bei denen Anführungszeichen "doppelt" bzw. gleich sind (z.B. verschachtelte `f"...{x['y']}..."` mit gleichem Anführungszeichen-Typ innen und außen) – betraf `generator.py:406` und `generator.py:412` (Aufrufe mit `art="jahrgaenge"`/`art="klassen"` innerhalb eines f-Strings mit doppelten Anführungszeichen; vor Python 3.12 ein SyntaxError, z.B. auf Windows-Builds mit älterem Python). Behoben durch einfache Anführungszeichen innen.
-- [ ] Umstellung auf neues Format mit `Arbeitsgruppen;Cloud#Kurs;Cloud#Gruppe` (Format siehe [README.md](README.md#csv-import-format-für-mnspro-cloud))
-- [ ] Ermittlung, welche Lerngruppe welcher Zielspalte (Arbeitsgruppe/Kurs/Gruppe) zugeordnet wird – Detailplanung siehe unten
+- [x] Umstellung auf neues Format mit `Arbeitsgruppen;Cloud#Kurs;Cloud#Gruppe` (Format siehe [README.md](README.md#csv-import-format-für-mnspro-cloud)) – umgesetzt in Schritt 7, noch zu testen (siehe unten)
+- [x] Ermittlung, welche Lerngruppe welcher Zielspalte (Arbeitsgruppe/Kurs/Gruppe) zugeordnet wird – Detailplanung + Umsetzung siehe unten (Schritte 1–7)
 - [x] "Leere Lerngruppen löschen" – neuer Button `LeereLerngruppenLöschen` (Utility, kein Pflichtschritt), löscht Lerngruppen ohne Schüler und bereinigt Verweise bei Lehrern/Schülern (`idsLerngruppen`), im Lookup-Dict und bei verwaisten Kursart-Overrides. Methode `loescheLeereLerngruppen()` in `generator.py`, mit Sicherheitsabfrage (Vorschau der betroffenen Team-Bezeichnungen) vor dem Löschen. Voraussetzung: `idsSchuelerZuLerngruppen` muss vorher gelaufen sein, sonst FEHLER-Meldung statt Fehlklassifikation. Von Peter selbst im Programm getestet.
 
 ## Detailplanung: Zuordnung Lerngruppe → Arbeitsgruppe / Kurs / Gruppe
@@ -105,18 +105,27 @@ Reihenfolge zum gemeinsamen Abarbeiten, jeder Schritt einzeln umsetz- und testba
   - In `writeLuLCSV` (`generator.py`) beim Aufbau der Team-Liste aus `idsLerngruppen`: `^` wird vorangestellt, wenn die Lehrkraft laut `idsLehrer` der jeweiligen Lerngruppe Kursleiter ist und die Einstellung aktiv ist. Ergebnistext zeigt die Anzahl der markierten Zuordnungen.
   - **100-Besitzer-Grenze:** direkt in `writeLuLCSV` mitgezählt (`Counter` je Team-Bezeichnung) und als Warnung im Ergebnistext ausgegeben, falls ein Team mehr als 100 als Besitzer markierte Lehrkräfte hätte – dort ist die tatsächliche Owner-Zahl bekannt, nicht in der Lerngruppen-bezogenen `zuordnung_uebersicht` aus Schritt 4.
 
-- [ ] **Schritt 6 – Jahrgangsteams auf drei Kategorien erweitern**
-  - `self.jahrgangsteams` von `{jahrgang: [Namen]}` auf `{jahrgang: {"arbeitsgruppe": [...], "kurs": [...], "gruppe": [...]}}` umstellen.
-  - Migrationscode beim Laden: alte flache Liste automatisch (z.B. nach `"kurs"`) überführen, mit Hinweis im Ergebnistext.
-  - `edit_jahrgangsteams`-Dialog um die zusätzlichen Kategorien erweitern.
+- [x] **Schritt 6 – Jahrgangsteams auf drei Kategorien erweitern**
+  - `self.jahrgangsteams` von `{jahrgang: [Namen]}` auf `{jahrgang: {"arbeitsgruppe": [...], "kurs": [...], "gruppe": [...]}}` umgestellt (Default in `__init__` direkt im neuen Format: `"Lehrer": {"arbeitsgruppe": ["*"], ...}`, da `"*"` laut MNSpro-Doku speziell der Arbeitsgruppen-Platzhalter ist).
+  - Neue Methode `normalisiere_jahrgangsteams()`: migriert alte flache Listen idempotent (`"*"` → `arbeitsgruppe`, alles andere → `kurs`), mit Hinweistext. Aufgerufen beim Laden (`load_state` in `SchildMNSDataMatcher_GUI.py`, Meldung im Textfeld) sowie defensiv in `edit_jahrgangsteams` und `_alle_jahrgangsteams`.
+  - Neue Methode `_alle_jahrgangsteams(jahrgang)`: fasst alle drei Kategorien zu einer flachen Liste zusammen – Übergangslösung für den noch einspaltigen CSV-Export in `writeSuSCSV`/`writeLuLCSV` (echte Aufteilung folgt in Schritt 7).
+  - `edit_jahrgangsteams`-Dialog: ein Eingabefeld je Zielkategorie (dynamisch aus `self.ziel_spalten` erzeugt), Listbox zeigt jetzt eine Zusammenfassung je Jahrgang.
+  - README-Abschnitt "Jahrgangsteams und LehrerTeams" aktualisiert.
 
-- [ ] **Schritt 7 – Export-Funktionen umstellen**
-  - `writeSuSCSV`/`writeLuLCSV`: statt einer `Gruppen`-Spalte drei Spalten gemäß `self.ziel_spalten` befüllen (Jahrgangsteams je Kategorie vorbelegen, dann pro Lerngruppe via `get_ziel_fuer_lerngruppe` einsortieren).
-  - Kopfzeile entsprechend anpassen; Ziel-Schuljahr bleibt außen vor (kein CSV-Feld, siehe README).
-  - Bestehendes altes Format ggf. als Option erhalten (Umschalter „klassisch/neu"), falls noch übergangsweise benötigt.
+- [x] **Schritt 7 – Export-Funktionen umstellen**
+  - `writeSuSCSV`/`writeLuLCSV` in `generator.py`: statt einer `Gruppen`-Spalte werden jetzt drei Spalten gemäß `self.ziel_spalten` befüllt – Jahrgangsteams je Kategorie vorbelegt, dann pro Lerngruppe via `get_ziel_fuer_lerngruppe` in die passende Spalte einsortiert.
+  - Kopfzeile jetzt `ReferenzId;Vorname;Nachname;Klasse(n);Arbeitsgruppen;Cloud#Kurs;Cloud#Gruppe` (Spaltennamen kommen aus `self.ziel_spalten.values()`, also automatisch konsistent mit Kursart-Zuordnung/Übersicht). Ziel-Schuljahr bleibt außen vor (kein CSV-Feld, siehe README).
+  - Lerngruppen ohne ermittelbare Zielkategorie werden übersprungen statt geraten – Anzahl und Beispiele landen im Ergebnistext (Verweis auf ZuordnungUebersicht/KursartZuordnung).
+  - **Kein Umschalter „klassisch/neu"** ergänzt – das alte Format wird direkt abgelöst, da für Zeugnisdaten ab MNSpro 2026 ohnehin auf Cloud-Gruppen umgestellt werden muss. Bei Bedarf leicht nachrüstbar.
+  - README aktualisiert (aktuelles Format, Hinweis zur Kursart-Zuordnung).
 
-- [ ] **Schritt 8 – Doku & Aufräumen**
-  - README.md (Bedienung, Pflichtpfad-Kette) um die neuen Schritte ergänzen.
-  - TODO.md-Punkte abhaken.
+- [x] **Schritt 8 – Doku & Aufräumen**
+  - README.md um alle neuen Buttons/Schritte ergänzt: Kursart-Zuordnung, Bezeichnungs-Muster (Regex), Besitzer-Markierung (^), Kontrollfunktionen (ListeTeamBez/ZuordnungUebersicht/LeereLerngruppenLöschen), erweiterte Jahrgangsteams.
+  - Veraltete Passagen bereinigt: "altes Format"-Beschreibung durch das jetzt tatsächlich erzeugte Format ersetzt, Verweis auf "offenen TODO-Punkt" durch konkrete Erklärung (KursartZuordnung/BezeichnungsMusterBearbeiten) ersetzt, Pflichtpfad-Kette und Farb-Legende (Unverändert-Buttons) aktualisiert.
+  - TODO.md-Punkte abgehakt (dieser Punkt hier).
+
+## Status: Schritte 1–8 abgeschlossen
+
+Die Umstellung auf das neue MNSpro-Cloud-Format (`Arbeitsgruppen`/`Cloud#Kurs`/`Cloud#Gruppe`) inkl. konfigurierbarer Zuordnungslogik ist damit vollständig umgesetzt und exportiert. Noch nicht durchgeführt: der reale End-to-End-Test im Programm (Peter macht das noch).
 
 Vorschlag: Wir beginnen mit **Schritt 1**, da alle weiteren Schritte darauf aufbauen.

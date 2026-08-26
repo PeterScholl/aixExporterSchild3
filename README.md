@@ -70,7 +70,11 @@ Für das neue MNSpro-Cloud-Format (siehe unten) muss für jede vorkommende Kursa
 
 Der Button ist Teil der Pflicht-Button-Führung (grün, bis für alle vorkommenden Kürzel eine Zuordnung gespeichert ist).
 
-**Hinweis (Stand jetzt):** Diese Zuordnung wird aktuell erfasst und in `status.json` gespeichert, fließt aber noch nicht in `schueler_csv`/`sus_extern_csv`/`lehrer_csv` ein – das folgt mit der Umstellung der Export-Funktionen auf das neue Format (siehe `TODO.md`).
+Diese Zuordnung fließt direkt in `schueler_csv`/`sus_extern_csv`/`lehrer_csv` ein: Lerngruppen ohne (noch) ermittelbare Zielkategorie werden beim Export übersprungen und im Ergebnistext aufgeführt, statt versehentlich in die falsche Spalte zu landen.
+
+### Bezeichnungs-Muster (Regex)
+
+Reicht die Zuordnung über `kursartKuerzel` nicht aus (z.B. weil eine Kursart je nach Bezeichnung mal Kurs, mal Gruppe sein soll), öffnet der Button **BezeichnungsMusterBearbeiten** einen Dialog für Regex-Muster auf die Bezeichnung einer Lerngruppe. Diese Muster werden **vor** der `kursartKuerzel`-Regel ausgewertet (Reihenfolge in der Liste = Priorität, erstes Match gewinnt) und lassen sich per ▲/▼ umsortieren. Beim Tippen zeigt eine Live-Vorschau sofort, wie viele/welche aktuellen Lerngruppen das Muster träfe.
 
 ### ReferenzIDs zuweisen
 
@@ -86,33 +90,42 @@ Als Alternative kann auch die Schild-ID als Referenz-ID genutzt werden. Es sollt
 
 Manchmal möchte man den Schülern eines Jahrgangs noch Teams zuweisen, z.B. der EF ein Team Abi28 oder dem Jahrgang 9 und 10 ein BO-Team. Dies kann in diesem Dialog erfolgen und Schüler aus dem Jahrganag erhalten dann beim Export dieses Team bzw. auch Teams.
 
-Besonders ist hier das Team für den Jahrgang **Lehrer**. Dieser Jahrgang wird allen Lehrern zugeordnet. Hier kann man z.B. die Gruppe * zuordnen um einzustellen, dass alte Gruppen erhalten bleiben.
+Seit der Umstellung auf das neue MNSpro-Cloud-Format gibt es dafür drei getrennte Eingabefelder – eines je Zielkategorie (Arbeitsgruppen / Cloud#Kurs / Cloud#Gruppe, siehe [CSV-Import-Format für MNSpro Cloud](#csv-import-format-für-mnspro-cloud)). Ein alter Jahrgangsteams-Eintrag aus einer früheren `status.json` wird beim Laden automatisch migriert (Hinweis erscheint im Textfeld).
+
+Besonders ist hier das Team für den Jahrgang **Lehrer**. Dieser Jahrgang wird allen Lehrern zugeordnet. Hier kann man im Feld **Arbeitsgruppen** z.B. `*` eintragen, um einzustellen, dass bereits vorhandene Arbeitsgruppen der Nutzer erhalten bleiben (siehe MNSpro-Doku zum `*`-Platzhalter).
 
 ### Lehrer ergänzen
 
 Aktuell (22.08.2025) sind in dem Lerngruppenexport nicht alle Lehrer enthalten - ich habe diese über einen Anknüpfungspunkt der API ergänzt. Lehrer die nicht in dem Lerngruppenexport vorhanden sind aber in lerngruppen referenziert werden, werden dann bei lehrern ergänzt. Dann muss natürlich wieder die Referenz-ID zugewiesen werden usw.
 
+### Besitzer-Markierung (^) für Kursleiter
+
+Beim Export von `lehrer_csv` werden Lehrkräfte automatisch mit `^` als Besitzer der Lerngruppen markiert, die sie laut `idsLehrer` unterrichten (analog zur bestehenden `^`-Markierung bei Klassenleitungen). Das lässt sich über die Checkbox **"Besitzer markieren"** im Einstellungen-Dialog (Datei-Menü) abschalten, Standard ist an. Der Ergebnistext von `lehrer_csv` zeigt außerdem eine Warnung, falls ein Team laut MNSpro-Doku die Grenze von 100 Besitzern überschreiten würde.
+
 ### Kontrollfunktionen
 
-Man kann mittels Statistik erstellen schon ein wenig prüfen auch die TempHilfsFunktion gibt einige Einblicke. In der letzten Buttonreihe sind Kontrollfunktionen geplant, so z.B. die Liste aller TeamBezeichnungen, damit kann man diese noch einmal auf Sinnhaftigkeit prüfen.
+- **Statistik anzeigen** / **TempHilfsfunktion** geben einen allgemeinen Überblick über die geladenen Daten.
+- **ListeTeamBez** listet alle vergebenen Team-Bezeichnungen alphabetisch auf, zum Prüfen auf Sinnhaftigkeit.
+- **ZuordnungUebersicht** ist der Kontrollschritt vor dem eigentlichen Export: zeigt je Zielkategorie (Arbeitsgruppe/Kurs/Gruppe) die betroffenen Lerngruppen, warnt vor nicht klassifizierten Lerngruppen und vor Team-Bezeichnungen, die in mehreren Zielkategorien gleichzeitig auftauchen.
+- **LeereLerngruppenLöschen** entfernt Lerngruppen ohne Schüler (z.B. in der Planungsphase eines Schuljahres hilfreich) und bereinigt dabei auch die Verweise bei Lehrern/Schülern, im Lookup-Dict und bei Kursart-Overrides. Voraussetzung: `idsSchuelerZuLerngruppen` muss vorher gelaufen sein; fragt vor dem Löschen zur Sicherheit nach.
 
 ### Export-Dateien erstellen
 
-Der eigentliche Export geschieht über die drei Buttons schueler_csv, sus_extern_csv und lehrer_csv - wenn alles gut läuft werden die entsprechenden csv-Dateien erstellt.
+Der eigentliche Export geschieht über die drei Buttons schueler_csv, sus_extern_csv und lehrer_csv - wenn alles gut läuft werden die entsprechenden csv-Dateien erstellt. Ein Blick in **ZuordnungUebersicht** vorher lohnt sich, um Überraschungen zu vermeiden.
 
 ## CSV-Import-Format für MNSpro Cloud
 
 Quelle: [MNSpro Cloud FAQ – Schuljahreswechsel / MNSpro Cloud Hybrid](https://docs.mnspro.cloud/faq-frequently-asked-questions/mnspro-cloud/schuljahreswechsel/mnspro-cloud-hybrid) und [MNSpro Cloud – CSV-Import/Massenimport](https://docs.mnspro.cloud/mnspro-classic/cloud-gruppen-neu/csv-import-massenimport).
 
-### Aktuell von diesem Tool erzeugtes Format (alt)
+### Von diesem Tool erzeugtes Format
 
-`writeSuSCSV`/`writeLuLCSV` in `generator.py` schreiben aktuell semikolon-getrennte Dateien mit der Kopfzeile
+`writeSuSCSV`/`writeLuLCSV` in `generator.py` schreiben semikolon-getrennte Dateien mit der Kopfzeile
 
 ```text
-ReferenzId;Vorname;Nachname;Klassen;Gruppen
+ReferenzId;Vorname;Nachname;Klasse(n);Arbeitsgruppen;Cloud#Kurs;Cloud#Gruppe
 ```
 
-wobei in der Spalte `Gruppen` mehrere Team-/Kursbezeichnungen mit `|` getrennt zusammengefasst werden. Das entspricht dem alten Arbeitsgruppen-Import von MNSpro.
+Innerhalb der drei Zielspalten werden mehrere Team-/Kursbezeichnungen mit `|` getrennt zusammengefasst. Welche Lerngruppe in welche der drei Spalten einsortiert wird, legt die Kursart-Zuordnung fest (siehe unten) – vor dem Export lohnt sich ein Blick in **ZuordnungUebersicht**, um nicht klassifizierte Lerngruppen oder Namenskollisionen zu entdecken.
 
 ### Neues Format seit MNSpro 2026 (Cloud-Gruppen)
 
@@ -150,7 +163,7 @@ Allgemeine Regeln:
 - **`Cloud#Kurs`**: reguläre Cloud-Kurse (Klassenteams, Jahrgangsteams, Fachkurse etc.) – jeweils einem Ziel-Schuljahr zugeordnet.
 - **`Cloud#Gruppe`**: Gruppen ohne Schuljahresbezug, z.B. Fachschaften.
 
-Für dieses Tool bedeutet das (siehe auch offener TODO-Punkt zur Ermittlung, welche Lerngruppen Kurs vs. Gruppe sind): In der Regel werden Klassen-, Jahrgangs- und Fachkurse als `Cloud#Kurs` exportiert. Nur die manuell eingerichteten AGs und Jahrgangsteams fallen heraus und müssten ggf. als `Cloud#Gruppe` behandelt werden.
+Für dieses Tool bedeutet das in der Regel: Klassen-, Jahrgangs- und Fachkurse werden über die Kursart-Zuordnung als `Cloud#Kurs` eingestuft, während z.B. Fachschaften eher als `Cloud#Gruppe` behandelt werden müssten. Welches `kursartKuerzel` wohin gehört, legt jede Schule selbst über **KursartZuordnung** (ggf. verfeinert über **BezeichnungsMusterBearbeiten**) fest – siehe die beiden Abschnitte oben.
 
 ## Button-Führung (Farben)
 
@@ -159,7 +172,7 @@ Damit man auch nach einer Pause weiß, wo man stehen geblieben ist, färbt das P
 - **Grün**: der nächste noch fehlende Pflichtschritt. Gibt es für einen Schritt zwei gleichwertige Buttons (z.B. bei den Referenz-IDs "aus File" oder "aus SuS-Ids"/"aus kuerzel"), werden beide grün markiert - es reicht, einen davon zu benutzen.
 - **Graublau**: bereits erledigte Schritte.
 - **Gelb**: Schritte, die gerade sinnvoll wären, aber nicht zwingend nötig sind (z.B. Ergänze Schüler/Lehrer aus DB, Jahrgangsteams, Teams nicht erstellen).
-- **Unverändert**: reine Hilfs- und Kontrollbuttons (Statistik anzeigen, Serverzertifikat laden, ClearScreen, ...) sowie die Verbindungseinstellung sind nicht Teil der Führung und bleiben immer normal nutzbar.
+- **Unverändert**: reine Hilfs- und Kontrollbuttons (Statistik anzeigen, ZuordnungUebersicht, BezeichnungsMusterBearbeiten, LeereLerngruppenLöschen, Serverzertifikat laden, ClearScreen, ...) sowie die Verbindungseinstellung sind nicht Teil der Führung und bleiben immer normal nutzbar.
 
 Der Pflichtpfad umfasst der Reihe nach: Abschnitts-ID holen → Lerngruppen holen → generateLookupDicts → idsSchuelerZuLerngruppen → TeamBezErstellen → KursartZuordnung → Referenz-IDs für Schüler → idsLerngruppenZuLehrern → idsKlassenleitungenZuLehrern → Referenz-IDs für Lehrer → schueler_csv → sus_extern_csv → lehrer_csv.
 
