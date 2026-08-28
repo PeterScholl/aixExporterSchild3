@@ -76,7 +76,7 @@ class ReportApp(tk.Tk):
             "ErgänzeLehrerAusDB": "Veraltet - holt ggf.\nfehlende Lehrer über\neinen alternativen\nAPI-Endpunkt",
             "ErgänzeSchülerAusDB": "holt ggf. fehlende Schüler über GET /schueler/abschnitt/{abschnittId}",
             "LeereLerngruppenLöschen": "Löscht Lerngruppen ohne Schüler\n(z.B. in der Planungsphase eines Schuljahres hilfreich)\nBereinigt dabei auch die Verweise bei Lehrern und Schülern\n(idsLerngruppen) sowie im Lookup-Dict und bei Kursart-Overrides.\nFragt vorher zur Sicherheit nach.",
-            "BezeichnungsMusterBearbeiten": "Regex-Muster auf die Bezeichnung einer Lerngruppe,\ndie VOR der kursartKuerzel-Regel über die Zielkategorie\n(Arbeitsgruppe/Cloud#Kurs/Cloud#Gruppe) entscheiden.\nReihenfolge in der Liste = Priorität, erstes Match gewinnt.",
+            "BezeichnungsMusterBearbeiten": "Regex-Muster auf die Team-Bezeichnung einer Lerngruppe,\ndie VOR der kursartKuerzel-Regel über die Zielkategorie\n(Arbeitsgruppe/Cloud#Kurs/Cloud#Gruppe) entscheiden.\nReihenfolge in der Liste = Priorität, erstes Match gewinnt.",
             "ZuordnungUebersicht": "Kontrolle vor dem Export: zeigt je Zielkategorie\n(Arbeitsgruppe/Cloud#Kurs/Cloud#Gruppe) die betroffenen Lerngruppen,\nwarnt vor nicht klassifizierten Lerngruppen und vor Team-Bezeichnungen,\ndie in mehreren Zielkategorien gleichzeitig auftauchen.",
         }
         

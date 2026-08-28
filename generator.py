@@ -554,7 +554,8 @@ class Generator():
 
         Prioritätsreihenfolge:
         1. manueller Einzel-Override über die Lerngruppen-ID (self.zuordnung_overrides)
-        2. Bezeichnungs-Muster (Regex, in Reihenfolge geprüft; erstes Match gewinnt)
+        2. Bezeichnungs-Muster (Regex gegen teamBez, ersatzweise bezeichnung falls TeamBez noch
+           nicht erstellt wurde; in Reihenfolge geprüft, erstes Match gewinnt)
         3. kursartKuerzel-Zuordnungstabelle (self.kursart_zuordnung) - Lerngruppen ohne
            kursartKuerzel (None/leer/fehlend, typischerweise normale Fachkurse) werden dabei unter
            dem Pseudo-Kürzel KEIN_KURSARTKUERZEL geführt, damit sie nicht unsichtbar durchfallen.
@@ -565,7 +566,7 @@ class Generator():
         if lg_id is not None and lg_id in self.zuordnung_overrides:
             return self.zuordnung_overrides[lg_id]
 
-        bezeichnung = lg.get("bezeichnung") or ""
+        bezeichnung = lg.get("teamBez") or lg.get("bezeichnung") or ""
         for regel in self.bezeichnung_muster:
             pattern = regel.get("pattern", "")
             if not pattern:
@@ -1201,7 +1202,8 @@ class Generator():
 
     def edit_bezeichnung_muster(self, master):
         """Dialog zur Pflege von self.bezeichnung_muster: geordnete Liste von Regex-Mustern, die
-        auf die Bezeichnung einer Lerngruppe geprüft werden und - VOR der kursartKuerzel-Regel,
+        auf die Team-Bezeichnung (teamBez, ersatzweise bezeichnung, falls TeamBez noch nicht
+        erstellt wurde) einer Lerngruppe geprüft werden und - VOR der kursartKuerzel-Regel,
         siehe get_ziel_fuer_lerngruppe() - über die Zielkategorie (Arbeitsgruppe/Cloud#Kurs/
         Cloud#Gruppe, self.ziel_spalten) entscheiden. Reihenfolge in der Liste = Priorität, das
         erste passende Muster gewinnt. Änderungen wirken sofort auf self.bezeichnung_muster
@@ -1209,7 +1211,8 @@ class Generator():
         if not hasattr(self, "bezeichnung_muster") or self.bezeichnung_muster is None:
             self.bezeichnung_muster = []
 
-        alle_bezeichnungen = [lg.get("bezeichnung") or "" for lg in getattr(self, "lerngruppen", [])]
+        alle_bezeichnungen = [lg.get("teamBez") or lg.get("bezeichnung") or ""
+                               for lg in getattr(self, "lerngruppen", [])]
 
         win = tk.Toplevel(master)
         win.title("Bezeichnungs-Muster bearbeiten (Regex)")
@@ -1225,7 +1228,7 @@ class Generator():
         lb.grid(row=1, column=0, columnspan=2, sticky="nsew", padx=8, pady=4)
         win.rowconfigure(1, weight=1)
 
-        ttk.Label(win, text="Regex-Muster (gegen Bezeichnung):").grid(row=2, column=0, sticky="w", padx=8, pady=4)
+        ttk.Label(win, text="Regex-Muster (gegen Team-Bezeichnung):").grid(row=2, column=0, sticky="w", padx=8, pady=4)
         e_pattern = ttk.Entry(win)
         e_pattern.grid(row=2, column=1, sticky="ew", padx=8, pady=4)
 
@@ -1255,7 +1258,13 @@ class Generator():
 
         e_pattern.bind("<KeyRelease>", aktualisiere_treffer)
 
+        # Trefferanzahl je Listeneintrag (Index -> Liste der passenden Bezeichnungen), gefüllt
+        # per "Testen"-Button; None = ungültiges Muster. Wird bei jeder Listenänderung verworfen,
+        # damit keine veralteten Zahlen angezeigt werden.
+        treffer_je_index = {}
+
         def refresh_listbox(select_index=None):
+            treffer_je_index.clear()
             lb.delete(0, tk.END)
             for regel in self.bezeichnung_muster:
                 lb.insert(tk.END, f'{regel.get("pattern", "")!r} → {regel.get("ziel", "")}')
@@ -1263,6 +1272,25 @@ class Generator():
                 lb.selection_clear(0, tk.END)
                 lb.selection_set(select_index)
                 lb.see(select_index)
+
+        def teste_alle_muster():
+            """Berechnet für jedes Muster in der Liste die Trefferanzahl gegen die aktuellen
+            Lerngruppen-Bezeichnungen und hängt sie in Klammern an den jeweiligen Eintrag an."""
+            sel = lb.curselection()
+            treffer_je_index.clear()
+            for i, regel in enumerate(self.bezeichnung_muster):
+                pattern = regel.get("pattern", "")
+                basis = f'{pattern!r} → {regel.get("ziel", "")}'
+                try:
+                    treffer = sorted({b for b in alle_bezeichnungen if re.search(pattern, b)})
+                except re.error as ex:
+                    treffer_je_index[i] = None
+                    lb.delete(i); lb.insert(i, f"{basis}  (⚠️ ungültig: {ex})")
+                    continue
+                treffer_je_index[i] = treffer
+                lb.delete(i); lb.insert(i, f"{basis}  ({len(treffer)} Treffer)")
+            if sel:
+                lb.selection_set(sel[0])
 
         def load_from_selection(_evt=None):
             sel = lb.curselection()
@@ -1335,6 +1363,53 @@ class Generator():
         ttk.Button(btns1, text="Löschen", command=loeschen).pack(side="left", padx=2)
         ttk.Button(btns1, text="▲ nach oben", command=lambda: verschieben(-1)).pack(side="left", padx=2)
         ttk.Button(btns1, text="▼ nach unten", command=lambda: verschieben(1)).pack(side="left", padx=2)
+        btn_testen = ttk.Button(btns1, text="Testen", command=teste_alle_muster)
+        btn_testen.pack(side="left", padx=(12, 2))
+        ToolTip(btn_testen, "Prüft jedes Muster gegen alle aktuellen Lerngruppen-Bezeichnungen\n"
+                             "und zeigt die Trefferanzahl in Klammern hinter dem Eintrag an.\n"
+                             "Zum Betrachten der einzelnen Treffer mit der Maus über einen\n"
+                             "Eintrag fahren.")
+
+        # Dynamisches Tooltip beim Überfahren einer Listbox-Zeile: zeigt die (bis zu 15)
+        # passenden Bezeichnungen dieses Musters, sofern schon per "Testen" berechnet.
+        hover = {"index": None, "after_id": None, "tip": None}
+
+        def hover_verstecken():
+            if hover["after_id"] is not None:
+                win.after_cancel(hover["after_id"])
+                hover["after_id"] = None
+            if hover["tip"] is not None:
+                hover["tip"].destroy()
+                hover["tip"] = None
+            hover["index"] = None
+
+        def hover_anzeigen(index, x_root, y_root):
+            treffer = treffer_je_index.get(index)
+            if not treffer:
+                return
+            beispiele = treffer[:15]
+            text = f"{len(treffer)} Treffer:\n" + "\n".join(beispiele)
+            if len(treffer) > len(beispiele):
+                text += "\n…"
+            tip = tk.Toplevel(win)
+            tip.wm_overrideredirect(True)
+            tip.wm_geometry(f"+{x_root + 12}+{y_root + 8}")
+            tk.Label(tip, text=text, background="lightyellow", relief="solid", borderwidth=1,
+                     justify="left").pack()
+            hover["tip"] = tip
+
+        def on_listbox_motion(evt):
+            index = lb.nearest(evt.y)
+            if index < 0 or index >= lb.size() or index not in treffer_je_index:
+                hover_verstecken()
+                return
+            if index != hover["index"]:
+                hover_verstecken()
+                hover["index"] = index
+                hover["after_id"] = win.after(400, lambda: hover_anzeigen(index, evt.x_root, evt.y_root))
+
+        lb.bind("<Motion>", on_listbox_motion)
+        lb.bind("<Leave>", lambda evt: hover_verstecken())
 
         btns2 = ttk.Frame(win)
         btns2.grid(row=6, column=0, columnspan=2, sticky="e", padx=8, pady=8)
