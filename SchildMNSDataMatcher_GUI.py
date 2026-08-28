@@ -396,6 +396,11 @@ class ReportApp(tk.Tk):
         ckButtonBesitzer.pack(anchor="w", padx=10, pady=5)
         ToolTip(ckButtonBesitzer, "Markiert Lehrkräfte bei lehrer_csv mit \"^\" als Besitzer der\nLerngruppen, die sie laut idsLehrer unterrichten (Kursleiter).\nOhne Markierung werden sie nur als Mitglied importiert.")
 
+        boolExportLehrerOhneKurs = tk.BooleanVar(value=getattr(self.generator, "lehrer_ohne_kurs_exportieren", False))
+        ckButtonLehrerOhneKurs = tk.Checkbutton(settings_window, text="Lehrer ohne Kurs exportieren", variable=boolExportLehrerOhneKurs)
+        ckButtonLehrerOhneKurs.pack(anchor="w", padx=10, pady=5)
+        ToolTip(ckButtonLehrerOhneKurs, "Sollen Lehrer ohne Kurs in\ndie Exportdatei geschrieben werden?")
+
         # Combobox für Verify
         tk.Label(settings_window, text="Verify:").pack(anchor="w", padx=10, pady=(10,0))
 
@@ -421,6 +426,7 @@ class ReportApp(tk.Tk):
                     logic.sv.verify = logic.sv.download_server_cert()
             self.generator.replaceSpecialChars = boolReplaceSpecialChars.get()
             self.generator.besitzer_markieren = boolBesitzerMarkieren.get()
+            self.generator.lehrer_ohne_kurs_exportieren = boolExportLehrerOhneKurs.get()
             settings_window.destroy()
 
         tk.Button(settings_window, text="Schließen", command=on_close).pack(pady=10)        

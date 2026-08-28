@@ -195,6 +195,7 @@ class Generator():
         self.bezeichnung_muster = []      # [{"pattern": regex-str, "ziel": Ziel-Schlüssel}, ...], erstes Match gewinnt
         self.zuordnung_overrides = {}     # {lerngruppen_id: Ziel-Schlüssel}, höchste Priorität
         self.besitzer_markieren = True    # Kursleiter (idsLehrer) beim Export als Besitzer ("^") markieren
+        self.lehrer_ohne_kurs_exportieren = False
         sv.setConfig(self.base_url, (self.username, self.password))
         if os.path.exists("server.pem"):
             sv.verify="server.pem"
@@ -811,6 +812,7 @@ class Generator():
 
             count = 0
             countBesitzer = 0
+            countNichtExportiert = 0
             besitzer_je_team = Counter()  # Team-Bezeichnung -> Anzahl mit "^" markierter Lehrkräfte (100er-Grenze, siehe MNSpro-Doku)
             lookup_lg = self.lookupDict.get("lerngruppen",{})
             lookup_klassen = self.lookupDict.get("klassen",{})
@@ -877,13 +879,18 @@ class Generator():
                 if (self.replaceSpecialChars):
                     nachname = replace_chars(nachname, my_char_map)
                     vorname = replace_chars(vorname, my_char_map)
-                writer.writerow([referenzId, vorname, nachname, klassen] + zielspalten_werte)
+                if (self.lehrer_ohne_kurs_exportieren or ids_lerngruppen):  
+                    writer.writerow([referenzId, vorname, nachname, klassen] + zielspalten_werte)
+                else:
+                    countNichtExportiert += 1
 
         if countNoTeams > 0: ergText+=(f"ℹ️ Es wurden {countNoTeams} Verknüpfungen wegen nicht zu erstellender Teams verhindert\n")
         if countNichtKlassifiziert > 0:
             beispiele = ", ".join(sorted(nicht_klassifiziert_beispiele)[:10])
             ergText += (f"⚠️ {countNichtKlassifiziert} Verknüpfungen wegen nicht klassifizierter Lerngruppen "
                         f"übersprungen (z.B. {beispiele}) - siehe ZuordnungUebersicht/KursartZuordnung\n")
+        if countNichtExportiert > 0:
+            ergText += f"ℹ {countNichtExportiert} Lehrpersonen wurden wegen fehlender Kurse nicht exportiert"
         if self.besitzer_markieren:
             ergText += f"ℹ️ {countBesitzer} Lehrkraft-Lerngruppen-Zuordnungen wurden als Besitzer (\"^\") markiert.\n"
             # MNSpro-Doku: pro Kurs/Gruppe maximal 100 Besitzer, überzählige werden automatisch zu Mitgliedern
@@ -968,6 +975,7 @@ class Generator():
                 count_ref+=1
             else:
                 obj["referenzId"] = objid
+                print(f"ACHTUNG: {objid} erhält keine Referenz-ID")
                 count_id+=1
 
         print(f"{len(result['mapping'])} Referenz-IDs zugewiesen.")
