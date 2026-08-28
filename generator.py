@@ -1394,6 +1394,8 @@ class Generator():
             tip = tk.Toplevel(win)
             tip.wm_overrideredirect(True)
             tip.wm_geometry(f"+{x_root + 12}+{y_root + 8}")
+            tip.attributes("-topmost", True)  # sonst landet es u.U. hinter dem Dialogfenster
+            tip.lift()
             tk.Label(tip, text=text, background="lightyellow", relief="solid", borderwidth=1,
                      justify="left").pack()
             hover["tip"] = tip
