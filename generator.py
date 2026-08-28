@@ -193,6 +193,9 @@ class Generator():
         self.ziel_spalten = {"arbeitsgruppe": "Arbeitsgruppen", "kurs": "Cloud#Kurs", "gruppe": "Cloud#Gruppe"}
         self.kursart_zuordnung = {}       # {kursartKuerzel: Ziel-Schlüssel}
         self.bezeichnung_muster = []      # [{"pattern": regex-str, "ziel": Ziel-Schlüssel}, ...], erstes Match gewinnt
+        self.teambez_rewrite = []         # [{"pattern": regex-str, "replace": str}, ...], sed-artig
+                                           # sequenziell (nicht "erstes Match gewinnt") auf teamBez
+                                           # angewandt, siehe addTeamBezZuLerngruppen()
         self.zuordnung_overrides = {}     # {lerngruppen_id: Ziel-Schlüssel}, höchste Priorität
         self.besitzer_markieren = True    # Kursleiter (idsLehrer) beim Export als Besitzer ("^") markieren
         self.lehrer_ohne_kurs_exportieren = False
@@ -545,6 +548,52 @@ class Generator():
 
         resultText+=f'Es wurden {count} Teambezeichnungen bei insgesamt {countlg} Lerngruppen zugeordnet\n'
         resultText+=f'Davon bekamen {countjg} nur den Jahrgang als Prefix und {countno} kein Prefix\n'
+
+        resultText += self._wende_teambez_rewrite_auf_lerngruppen_an()
+        return resultText
+
+    def wende_teambez_rewrite_an(self, text: str) -> tuple[str, list[int]]:
+        """Wendet self.teambez_rewrite sed-artig sequenziell auf `text` an: jede Regel wird der
+        Reihe nach auf das (ggf. schon von einer vorherigen Regel veränderte) Ergebnis angewandt -
+        anders als bei self.bezeichnung_muster gewinnt hier NICHT nur die erste passende Regel,
+        sondern es können mehrere Regeln nacheinander greifen. Gibt den (ggf. unveränderten) Text
+        sowie die Indizes der Regeln zurück, die tatsächlich etwas ersetzt haben (für Statistik)."""
+        getroffen = []
+        for i, regel in enumerate(self.teambez_rewrite):
+            pattern = regel.get("pattern", "")
+            replace = regel.get("replace", "")
+            if not pattern:
+                continue
+            try:
+                neu, anzahl = re.subn(pattern, replace, text)
+            except re.error:
+                continue  # ungültiges Muster wird ignoriert statt das Programm abzubrechen
+            if anzahl:
+                text = neu
+                getroffen.append(i)
+        return text, getroffen
+
+    def _wende_teambez_rewrite_auf_lerngruppen_an(self) -> str:
+        """Wendet self.teambez_rewrite auf lg["teamBez"] aller Lerngruppen an (im Anschluss an
+        addTeamBezZuLerngruppen aufgerufen) und liefert einen Ergebnistext mit der Trefferanzahl
+        je Regel, z.B. um zu prüfen, ob eine Regel überhaupt gegriffen hat."""
+        if not self.teambez_rewrite:
+            return ""
+        treffer_je_regel = Counter()
+        for lg in getattr(self, "lerngruppen", []):
+            teamBez = lg.get("teamBez")
+            if not teamBez:
+                continue
+            neu, getroffen = self.wende_teambez_rewrite_an(teamBez)
+            if getroffen:
+                lg["teamBez"] = neu
+                for i in getroffen:
+                    treffer_je_regel[i] += 1
+
+        resultText = "TeamBez-Rewrite-Regeln angewandt:\n"
+        for i, regel in enumerate(self.teambez_rewrite):
+            resultText += (f'  {regel.get("pattern","")!r} → {regel.get("replace","")!r}: '
+                            f'{treffer_je_regel.get(i, 0)}x\n')
         return resultText
 
     def get_ziel_fuer_lerngruppe(self, lg: dict) -> str | None:
@@ -1390,6 +1439,236 @@ class Generator():
             beispiele = treffer[:15]
             text = f"{len(treffer)} Treffer:\n" + "\n".join(beispiele)
             if len(treffer) > len(beispiele):
+                text += "\n…"
+            tip = tk.Toplevel(win)
+            tip.wm_overrideredirect(True)
+            tip.wm_geometry(f"+{x_root + 12}+{y_root + 8}")
+            tip.attributes("-topmost", True)  # sonst landet es u.U. hinter dem Dialogfenster
+            tip.lift()
+            tk.Label(tip, text=text, background="lightyellow", relief="solid", borderwidth=1,
+                     justify="left").pack()
+            hover["tip"] = tip
+
+        def on_listbox_motion(evt):
+            index = lb.nearest(evt.y)
+            if index < 0 or index >= lb.size() or index not in treffer_je_index:
+                hover_verstecken()
+                return
+            if index != hover["index"]:
+                hover_verstecken()
+                hover["index"] = index
+                hover["after_id"] = win.after(400, lambda: hover_anzeigen(index, evt.x_root, evt.y_root))
+
+        lb.bind("<Motion>", on_listbox_motion)
+        lb.bind("<Leave>", lambda evt: hover_verstecken())
+
+        btns2 = ttk.Frame(win)
+        btns2.grid(row=6, column=0, columnspan=2, sticky="e", padx=8, pady=8)
+        ttk.Button(btns2, text="Schließen", command=win.destroy).pack(side="right")
+
+        lb.bind("<<ListboxSelect>>", load_from_selection)
+        win.protocol("WM_DELETE_WINDOW", win.destroy)
+
+        refresh_listbox()
+        win.wait_window()
+
+    def edit_teambez_rewrite(self, master):
+        """Dialog zur Pflege von self.teambez_rewrite: geordnete Liste von sed-artigen
+        Ersetzungs-Regeln (Regex-Suchmuster + Ersetzung, z.B. um "Q1"-Teams in "Abi28"
+        umzubenennen), die im Anschluss an addTeamBezZuLerngruppen() sequenziell auf jede
+        Team-Bezeichnung angewandt werden (anders als bei self.bezeichnung_muster gewinnt hier
+        nicht nur die erste passende Regel - alle Regeln werden der Reihe nach angewandt, jede
+        auf das Ergebnis der vorherigen). Reihenfolge in der Liste = Anwendungsreihenfolge.
+        Änderungen wirken sofort auf self.teambez_rewrite (kein separates "Speichern" nötig,
+        analog zu edit_jahrgangsteams/edit_bezeichnung_muster)."""
+        if not hasattr(self, "teambez_rewrite") or self.teambez_rewrite is None:
+            self.teambez_rewrite = []
+
+        alle_bezeichnungen = [lg.get("teamBez") or lg.get("bezeichnung") or ""
+                               for lg in getattr(self, "lerngruppen", [])]
+
+        win = tk.Toplevel(master)
+        win.title("TeamBez-Rewrite bearbeiten (Regex, sed-artig)")
+        win.transient(master)
+        win.grab_set()
+        win.geometry("560x480")
+        win.columnconfigure(1, weight=1)
+
+        ttk.Label(win, text="Anwendungsreihenfolge (von oben nach unten, alle Regeln werden angewandt):") \
+            .grid(row=0, column=0, columnspan=2, sticky="w", padx=8, pady=(10, 2))
+
+        lb = tk.Listbox(win, height=8, exportselection=False)
+        lb.grid(row=1, column=0, columnspan=2, sticky="nsew", padx=8, pady=4)
+        win.rowconfigure(1, weight=1)
+
+        ttk.Label(win, text="Suchmuster (Regex):").grid(row=2, column=0, sticky="w", padx=8, pady=4)
+        e_pattern = ttk.Entry(win)
+        e_pattern.grid(row=2, column=1, sticky="ew", padx=8, pady=4)
+
+        ttk.Label(win, text="Ersetzung:").grid(row=3, column=0, sticky="w", padx=8, pady=4)
+        e_replace = ttk.Entry(win)
+        e_replace.grid(row=3, column=1, sticky="ew", padx=8, pady=4)
+        ToolTip(e_replace, "Wie bei re.sub(): \\1, \\2, ... verweisen auf Klammer-Gruppen im\n"
+                            "Suchmuster. Beispiel: Suchmuster '^Q1' + Ersetzung 'Abi28' macht aus\n"
+                            "'Q1 - Deutsch GK' → 'Abi28 - Deutsch GK'.")
+
+        lbl_treffer = ttk.Label(win, text="", foreground="#555555")
+        lbl_treffer.grid(row=4, column=0, columnspan=2, sticky="w", padx=8, pady=(0, 4))
+
+        def aktualisiere_treffer(*_args):
+            """Live-Vorschau: wie viele/welche aktuellen Team-Bezeichnungen dieses Muster träfe -
+            zum direkten Ausprobieren im Programm, ohne extra Testskript."""
+            pattern = e_pattern.get()
+            replace = e_replace.get()
+            if not pattern:
+                lbl_treffer.config(text="")
+                return
+            try:
+                treffer = [b for b in alle_bezeichnungen if re.search(pattern, b)]
+                beispiele = sorted({f"{b} → {re.sub(pattern, replace, b)}" for b in treffer})
+            except re.error as ex:
+                lbl_treffer.config(text=f"⚠️ Ungültiges Muster: {ex}")
+                return
+            text = f"{len(treffer)} Treffer in aktuellen Team-Bezeichnungen"
+            if beispiele:
+                text += f" (z.B. {', '.join(beispiele[:3])})"
+            lbl_treffer.config(text=text)
+
+        e_pattern.bind("<KeyRelease>", aktualisiere_treffer)
+        e_replace.bind("<KeyRelease>", aktualisiere_treffer)
+
+        # Trefferanzahl/-beispiele je Listeneintrag (Index -> Liste "vorher → nachher"), gefüllt
+        # per "Testen"-Button; None = ungültiges Muster. Wird bei jeder Listenänderung verworfen,
+        # damit keine veralteten Zahlen angezeigt werden.
+        treffer_je_index = {}
+
+        def refresh_listbox(select_index=None):
+            treffer_je_index.clear()
+            lb.delete(0, tk.END)
+            for regel in self.teambez_rewrite:
+                lb.insert(tk.END, f'{regel.get("pattern", "")!r} → {regel.get("replace", "")!r}')
+            if select_index is not None and 0 <= select_index < lb.size():
+                lb.selection_clear(0, tk.END)
+                lb.selection_set(select_index)
+                lb.see(select_index)
+
+        def teste_alle_regeln():
+            """Berechnet für jede Regel in der Liste die Trefferanzahl gegen die aktuellen
+            Team-Bezeichnungen (jede Regel für sich, unabhängig von den anderen) und hängt sie
+            in Klammern an den jeweiligen Eintrag an."""
+            sel = lb.curselection()
+            treffer_je_index.clear()
+            for i, regel in enumerate(self.teambez_rewrite):
+                pattern = regel.get("pattern", "")
+                replace = regel.get("replace", "")
+                basis = f'{pattern!r} → {replace!r}'
+                try:
+                    treffer = [b for b in alle_bezeichnungen if re.search(pattern, b)]
+                    beispiele = sorted({f"{b} → {re.sub(pattern, replace, b)}" for b in treffer})
+                except re.error as ex:
+                    treffer_je_index[i] = None
+                    lb.delete(i); lb.insert(i, f"{basis}  (⚠️ ungültig: {ex})")
+                    continue
+                treffer_je_index[i] = beispiele
+                lb.delete(i); lb.insert(i, f"{basis}  ({len(treffer)} Treffer)")
+            if sel:
+                lb.selection_set(sel[0])
+
+        def load_from_selection(_evt=None):
+            sel = lb.curselection()
+            if not sel:
+                return
+            regel = self.teambez_rewrite[sel[0]]
+            e_pattern.delete(0, tk.END); e_pattern.insert(0, regel.get("pattern", ""))
+            e_replace.delete(0, tk.END); e_replace.insert(0, regel.get("replace", ""))
+            aktualisiere_treffer()
+
+        def gueltige_eingabe():
+            pattern = e_pattern.get().strip()
+            replace = e_replace.get()
+            if not pattern:
+                messagebox.showwarning("Hinweis", "Bitte ein Suchmuster eingeben.", parent=win)
+                return None
+            try:
+                re.compile(pattern)
+            except re.error as ex:
+                messagebox.showwarning("Ungültiges Muster", str(ex), parent=win)
+                return None
+            return pattern, replace
+
+        def hinzufuegen():
+            eingabe = gueltige_eingabe()
+            if not eingabe:
+                return
+            pattern, replace = eingabe
+            self.teambez_rewrite.append({"pattern": pattern, "replace": replace})
+            refresh_listbox(select_index=len(self.teambez_rewrite) - 1)
+
+        def aktualisieren():
+            sel = lb.curselection()
+            if not sel:
+                messagebox.showinfo("Hinweis", "Bitte zuerst einen Eintrag in der Liste auswählen.", parent=win)
+                return
+            eingabe = gueltige_eingabe()
+            if not eingabe:
+                return
+            pattern, replace = eingabe
+            self.teambez_rewrite[sel[0]] = {"pattern": pattern, "replace": replace}
+            refresh_listbox(select_index=sel[0])
+
+        def loeschen():
+            sel = lb.curselection()
+            if not sel:
+                return
+            del self.teambez_rewrite[sel[0]]
+            e_pattern.delete(0, tk.END)
+            e_replace.delete(0, tk.END)
+            refresh_listbox()
+
+        def verschieben(delta):
+            sel = lb.curselection()
+            if not sel:
+                return
+            i = sel[0]
+            j = i + delta
+            if 0 <= j < len(self.teambez_rewrite):
+                self.teambez_rewrite[i], self.teambez_rewrite[j] = self.teambez_rewrite[j], self.teambez_rewrite[i]
+                refresh_listbox(select_index=j)
+
+        btns1 = ttk.Frame(win)
+        btns1.grid(row=5, column=0, columnspan=2, sticky="ew", padx=8, pady=4)
+        ttk.Button(btns1, text="Hinzufügen", command=hinzufuegen).pack(side="left", padx=2)
+        ttk.Button(btns1, text="Aktualisieren", command=aktualisieren).pack(side="left", padx=2)
+        ttk.Button(btns1, text="Löschen", command=loeschen).pack(side="left", padx=2)
+        ttk.Button(btns1, text="▲ nach oben", command=lambda: verschieben(-1)).pack(side="left", padx=2)
+        ttk.Button(btns1, text="▼ nach unten", command=lambda: verschieben(1)).pack(side="left", padx=2)
+        btn_testen = ttk.Button(btns1, text="Testen", command=teste_alle_regeln)
+        btn_testen.pack(side="left", padx=(12, 2))
+        ToolTip(btn_testen, "Prüft jede Regel für sich gegen alle aktuellen Team-Bezeichnungen\n"
+                             "und zeigt die Trefferanzahl in Klammern hinter dem Eintrag an.\n"
+                             "Zum Betrachten der einzelnen Vorher/Nachher-Beispiele mit der Maus\n"
+                             "über einen Eintrag fahren.")
+
+        # Dynamisches Tooltip beim Überfahren einer Listbox-Zeile: zeigt (bis zu 15) "vorher →
+        # nachher"-Beispiele dieser Regel, sofern schon per "Testen" berechnet.
+        hover = {"index": None, "after_id": None, "tip": None}
+
+        def hover_verstecken():
+            if hover["after_id"] is not None:
+                win.after_cancel(hover["after_id"])
+                hover["after_id"] = None
+            if hover["tip"] is not None:
+                hover["tip"].destroy()
+                hover["tip"] = None
+            hover["index"] = None
+
+        def hover_anzeigen(index, x_root, y_root):
+            beispiele = treffer_je_index.get(index)
+            if not beispiele:
+                return
+            gezeigt = beispiele[:15]
+            text = f"{len(beispiele)} Treffer:\n" + "\n".join(gezeigt)
+            if len(beispiele) > len(gezeigt):
                 text += "\n…"
             tip = tk.Toplevel(win)
             tip.wm_overrideredirect(True)

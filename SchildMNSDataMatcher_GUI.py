@@ -47,7 +47,8 @@ class ReportApp(tk.Tk):
         # Die Buttons im Grid
         button_texts = [
             "Verbindungseinstellung", "Abschnitts-ID holen", "Lerngruppen holen","Statistik anzeigen", 
-            "Serverzertifikat laden", "generateLookupDicts", "idsSchuelerZuLerngruppen", "TeamBezErstellen",
+            "Serverzertifikat laden", "generateLookupDicts", "idsSchuelerZuLerngruppen",
+            "TeamBezRewriteBearbeiten", "TeamBezErstellen",
             "KursartZuordnung", "Referenz-IDs aus File", "ReferenzIDs aus SuS-Ids", "LehrerReferenzen aus File",
             "L-ReferenzIDs aus kuerzel", "Jahrgangsteams", "idsLerngruppenZuLehrern","idsKlassenleitungenZuLehrern",
             "Teams nicht erstellen", "schueler_csv", "sus_extern_csv", "lehrer_csv",
@@ -63,6 +64,7 @@ class ReportApp(tk.Tk):
             "generateLookupDicts": "Erstellt Hilfs-Dictionaries für schnelleren Zugriff\nz.B. um von SchülerID auf Klasse oder Jahrgang zu kommen",
             "idsSchuelerZuLerngruppen": "Füllt die Lerngruppen mit den zugehörigen Schüler-IDs",
             "teamBezErstellen": "Erstellt die TeamBezeichnung für die Lerngruppen\nz.B. 5a - D oder EF - M-GK1 oder AG Informatik",
+            "TeamBezRewriteBearbeiten": "Sed-artige Ersetzungs-Regeln (Regex-Suchmuster + Ersetzung)\nfür Team-Bezeichnungen pflegen, z.B. um 'Q1 - ...' in\n'Abi28 - ...' umzubenennen. Werden bei 'TeamBezErstellen'\nim Anschluss an die Erzeugung angewandt (Reihenfolge = Anwendungsreihenfolge).",
             "Jahrgangsteams": "Funktion zum Erstellen von Jahrgangsteams\nz.B. für die EF ein Team mit Namen Abi2028",
             "KursartZuordnung": "Legt pro kursartKuerzel fest, ob Lerngruppen dieser Kursart\nbeim Export als Arbeitsgruppe, Cloud#Kurs oder Cloud#Gruppe\nbehandelt werden (neues MNSpro-Cloud-Format)",
             "idsLerngruppenZuLehrern": "Füllt die Lehrer mit den zugeordneten Lerngruppen-IDs",
@@ -179,6 +181,8 @@ class ReportApp(tk.Tk):
                 anz = self.generator.addSuSIdsZuLerngruppen()
                 self.report_text.insert(tk.END,f"Es wurden {anz} Verknüpfungen erstellt\n")
                 self.report_text.see(tk.END)
+            case "TeamBezRewriteBearbeiten":
+                self.generator.edit_teambez_rewrite(self)
             case "TeamBezErstellen":
                 self.report_text.insert(tk.END, self.generator.addTeamBezZuLerngruppen())
                 self.report_text.see(tk.END)
