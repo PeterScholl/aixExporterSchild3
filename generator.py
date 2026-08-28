@@ -199,6 +199,12 @@ class Generator():
         self.zuordnung_overrides = {}     # {lerngruppen_id: Ziel-Schlüssel}, höchste Priorität
         self.besitzer_markieren = True    # Kursleiter (idsLehrer) beim Export als Besitzer ("^") markieren
         self.lehrer_ohne_kurs_exportieren = False
+        # {Ziel-Schlüssel: Wert} für den Button "Schüler aufräumen" (siehe schueler_aufraeumen()):
+        # fester Wert je Zielspalte, der WÖRTLICH für ALLE Schüler eingetragen wird (keine
+        # Lerngruppen-Berechnung). "*" (Standard) = MNSpro-Cloud-Konvention: beim Import bleibt
+        # die bestehende Zuordnung erhalten; "" = Spalte für ALLE Schüler leeren; alles andere
+        # wird wörtlich für ALLE Schüler eingetragen.
+        self.schueler_aufraeumen_werte = {}
         sv.setConfig(self.base_url, (self.username, self.password))
         if os.path.exists("server.pem"):
             sv.verify="server.pem"
@@ -767,7 +773,13 @@ class Generator():
         # Kürzel zurückgeben, falls vorhanden
         return jahrgang.get("kuerzelAnzeige")
     
-    def writeSuSCSV(self, statusList = [2], filename="Student.csv"): # Status 2 - aktiv, 6 - extern
+    def writeSuSCSV(self, statusList = [2], filename="Student.csv", spalten_override: dict | None = None):
+        # Status 2 - aktiv, 6 - extern
+        # spalten_override: {Ziel-Schlüssel: Wert}, siehe schueler_aufraeumen() - wenn gesetzt,
+        # wird die Lerngruppen-basierte Berechnung übersprungen und für ALLE Schüler stattdessen
+        # dieser feste Wert je Zielspalte geschrieben. "*" landet dabei WÖRTLICH in der Spalte -
+        # das ist kein Platzhalter für unser Tool, sondern eine MNSpro-Cloud-Konvention: beim
+        # Import bedeutet "*" dort "bestehende Zuordnung beibehalten". "" leert die Spalte.
         ergText = ""
         countNoTeams = 0
         countNichtKlassifiziert = 0
@@ -800,40 +812,56 @@ class Generator():
                 nachname = s.get("nachname")
                 vorname = s.get("vorname")
                 klasse = self.get_klasse_von_schueler(s.get("id"))
-                jahrgang = self.get_jahrgang_von_schueler(s.get("id")) # für Jahrgangsteams
-                ids_lerngruppen = s.get("idsLerngruppen", [])
 
-                # Team-Listen je Zielkategorie, mit den Jahrgangsteams vorbelegt
-                jahrgangs_eintrag = self.jahrgangsteams.get(jahrgang, {})
-                teams_je_ziel = {ziel: list(jahrgangs_eintrag.get(ziel, [])) for ziel in self.ziel_spalten}
-
-                if ids_lerngruppen:
-                    for lg_id in ids_lerngruppen:
-                        lg = lookup_lg.get(lg_id,{})
-                        if not lg:
-                            ergText+=f"Lerngruppe mit {lg_id} nicht gefunden\n"
-                            continue
-                        bezeichnung = lg.get("teamBez")
-                        if (bezeichnung not in self.noTeams):
-                            ziel = self.get_ziel_fuer_lerngruppe(lg)
-                            if ziel is None:
-                                countNichtKlassifiziert += 1
-                                nicht_klassifiziert_beispiele.add(bezeichnung)
-                                continue
-                            if (self.replaceSpecialChars):
-                                bezeichnung = replace_chars(bezeichnung, my_char_map)
-                            teams_je_ziel.setdefault(ziel, []).append(bezeichnung)
-                        else:
-                            countNoTeams+=1
+                if spalten_override is not None:
+                    # Schüler aufräumen: keine Lerngruppen-Berechnung, für ALLE Schüler die
+                    # gleichen festen Werte je Zielspalte (siehe Kommentar oben zu "*").
+                    zielspalten_werte = [spalten_override.get(ziel, "") for ziel in self.ziel_spalten]
                 else:
-                    ergText+=f"⚠️  {nachname}, {vorname} ({klasse}) hat keine Lerngruppe\n"
+                    jahrgang = self.get_jahrgang_von_schueler(s.get("id")) # für Jahrgangsteams
+                    ids_lerngruppen = s.get("idsLerngruppen", [])
 
-                zielspalten_werte = ["|".join(teams_je_ziel.get(ziel, [])) for ziel in self.ziel_spalten]
+                    # Team-Listen je Zielkategorie, mit den Jahrgangsteams vorbelegt
+                    jahrgangs_eintrag = self.jahrgangsteams.get(jahrgang, {})
+                    teams_je_ziel = {ziel: list(jahrgangs_eintrag.get(ziel, [])) for ziel in self.ziel_spalten}
+
+                    if ids_lerngruppen:
+                        for lg_id in ids_lerngruppen:
+                            lg = lookup_lg.get(lg_id,{})
+                            if not lg:
+                                ergText+=f"Lerngruppe mit {lg_id} nicht gefunden\n"
+                                continue
+                            bezeichnung = lg.get("teamBez")
+                            if (bezeichnung not in self.noTeams):
+                                ziel = self.get_ziel_fuer_lerngruppe(lg)
+                                if ziel is None:
+                                    countNichtKlassifiziert += 1
+                                    nicht_klassifiziert_beispiele.add(bezeichnung)
+                                    continue
+                                if (self.replaceSpecialChars):
+                                    bezeichnung = replace_chars(bezeichnung, my_char_map)
+                                teams_je_ziel.setdefault(ziel, []).append(bezeichnung)
+                            else:
+                                countNoTeams+=1
+                    else:
+                        ergText+=f"⚠️  {nachname}, {vorname} ({klasse}) hat keine Lerngruppe\n"
+
+                    zielspalten_werte = ["|".join(teams_je_ziel.get(ziel, [])) for ziel in self.ziel_spalten]
                 count += 1
                 if (self.replaceSpecialChars):
                     nachname = replace_chars(nachname, my_char_map)
                     vorname = replace_chars(vorname, my_char_map)
                 writer.writerow([referenzId, vorname, nachname, klasse] + zielspalten_werte)
+        if spalten_override is not None:
+            for ziel, wert in spalten_override.items():
+                spaltenname = self.ziel_spalten.get(ziel, ziel)
+                if wert == "":
+                    beschreibung = "geleert"
+                elif wert == "*":
+                    beschreibung = "auf '*' gesetzt (MNSpro behält beim Import die bestehende Zuordnung)"
+                else:
+                    beschreibung = f"auf {wert!r} gesetzt"
+                ergText += f"ℹ️ Spalte '{spaltenname}' wurde für ALLE Schüler {beschreibung} (Lerngruppen-Zuordnung ignoriert)\n"
         if countNoTeams > 0: ergText+=(f"ℹ️ Es wurden {countNoTeams} Verknüpfungen wegen nicht zu erstellender Teams verhindert\n")
         if countNichtKlassifiziert > 0:
             beispiele = ", ".join(sorted(nicht_klassifiziert_beispiele)[:10])
@@ -842,6 +870,66 @@ class Generator():
         ergText+=(f"✅ CSV-Datei '{filename}' wurde mit {count} Einträgen erstellt.\n")
         self.exportedFlags["sus_extern_csv" if filename == "StudentExternal.csv" else "schueler_csv"] = True
         return ergText
+
+    def schueler_aufraeumen(self, master) -> str:
+        """Dialog + Export für den Button "Schüler aufräumen": legt pro Zielkategorie
+        (Arbeitsgruppe/Cloud#Kurs/Cloud#Gruppe, siehe self.ziel_spalten) einen festen Wert fest,
+        der beim Erstellen der Schüler-CSV WÖRTLICH für ALLE Schüler eingetragen wird - es werden
+        dabei gar keine Werte aus den Lerngruppen übernommen, die normale Berechnung entfällt
+        komplett. "*" (Standard) landet dabei buchstäblich in der Spalte - das ist eine
+        MNSpro-Cloud-Konvention: beim Import bedeutet "*" dort "bestehende Zuordnung beibehalten".
+        Leer = Spalte für alle Schüler löschen; alles andere wird ebenfalls wörtlich für jeden
+        Schüler eingetragen (z.B. eine feste Lizenzgruppe). Nützlich, um MNSpro-Cloud-Spalten
+        gezielt zurückzusetzen, ohne die Lerngruppen-Zuordnung selbst anzufassen.
+        Die eingegebenen Werte werden in self.schueler_aufraeumen_werte gemerkt (bleiben bis zur
+        nächsten Änderung vorbelegt). Gibt bei "Schüler.csv erstellen" den Exportbericht von
+        writeSuSCSV() zurück, sonst einen Abbruch-Hinweis - analog zu loescheLeereLerngruppen()."""
+        for ziel in self.ziel_spalten:
+            self.schueler_aufraeumen_werte.setdefault(ziel, "*")
+
+        win = tk.Toplevel(master)
+        win.title("Schüler aufräumen - feste Spaltenwerte für die Schüler-CSV")
+        win.transient(master)
+        win.grab_set()
+        win.columnconfigure(1, weight=1)
+
+        ttk.Label(win, text="Fester Wert je Zielspalte, WÖRTLICH für ALLE Schüler (keine Lerngruppen-Berechnung):") \
+            .grid(row=0, column=0, columnspan=2, sticky="w", padx=8, pady=(10, 2))
+        info = ttk.Label(win, foreground="#555555", wraplength=420, justify="left",
+                          text='leer = Spalte für alle Schüler löschen   •   * = bestehende Zuordnung '
+                               'bleibt beim MNSpro-Import erhalten   •   sonst: dieser Text wird '
+                               'wörtlich für jeden Schüler eingetragen')
+        info.grid(row=1, column=0, columnspan=2, sticky="w", padx=8, pady=(0, 10))
+
+        entries = {}
+        row = 2
+        for ziel, spaltenname in self.ziel_spalten.items():
+            ttk.Label(win, text=f"{spaltenname}:").grid(row=row, column=0, sticky="w", padx=8, pady=4)
+            e = ttk.Entry(win)
+            e.insert(0, self.schueler_aufraeumen_werte.get(ziel, "*"))
+            e.grid(row=row, column=1, sticky="ew", padx=8, pady=4)
+            entries[ziel] = e
+            row += 1
+
+        ergebnis = {"text": ""}
+
+        def abbrechen():
+            win.destroy()
+
+        def erstellen():
+            for ziel, e in entries.items():
+                self.schueler_aufraeumen_werte[ziel] = e.get()
+            win.destroy()
+            ergebnis["text"] = self.writeSuSCSV(spalten_override=dict(self.schueler_aufraeumen_werte))
+
+        btns = ttk.Frame(win)
+        btns.grid(row=row, column=0, columnspan=2, sticky="e", padx=8, pady=8)
+        ttk.Button(btns, text="Abbrechen", command=abbrechen).pack(side="right", padx=6)
+        ttk.Button(btns, text="Schüler.csv erstellen", command=erstellen).pack(side="right")
+        win.protocol("WM_DELETE_WINDOW", abbrechen)
+        win.wait_window()
+
+        return ergebnis["text"] or "Abgebrochen - keine Schüler-CSV erstellt.\n"
 
     def writeLuLCSV(self):
         ergText = ""
