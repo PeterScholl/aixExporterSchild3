@@ -80,7 +80,7 @@ class ReportApp(tk.Tk):
             "LeereLerngruppenLöschen": "Löscht Lerngruppen ohne Schüler\n(z.B. in der Planungsphase eines Schuljahres hilfreich)\nBereinigt dabei auch die Verweise bei Lehrern und Schülern\n(idsLerngruppen) sowie im Lookup-Dict und bei Kursart-Overrides.\nFragt vorher zur Sicherheit nach.",
             "BezeichnungsMusterBearbeiten": "Regex-Muster auf die Team-Bezeichnung einer Lerngruppe,\ndie VOR der kursartKuerzel-Regel über die Zielkategorie\n(Arbeitsgruppe/Cloud#Kurs/Cloud#Gruppe) entscheiden.\nReihenfolge in der Liste = Priorität, erstes Match gewinnt.",
             "ZuordnungUebersicht": "Kontrolle vor dem Export: zeigt je Zielkategorie\n(Arbeitsgruppe/Cloud#Kurs/Cloud#Gruppe) die betroffenen Lerngruppen,\nwarnt vor nicht klassifizierten Lerngruppen und vor Team-Bezeichnungen,\ndie in mehreren Zielkategorien gleichzeitig auftauchen.",
-            "Schüler aufräumen": "Erstellt die Schüler-CSV mit einem festen Wert je Zielspalte,\nwörtlich für ALLE Schüler (keine Lerngruppen-Berechnung).\nleer = Spalte löschen, * = bestehende Zuordnung bleibt beim\nMNSpro-Import erhalten, sonst: Text wird wörtlich eingetragen.",
+            "Schüler aufräumen": "Eigener, vom normalen schueler_csv-Export komplett unabhängiger\nExport: pro Jahrgang ein fester Wert je Zielspalte, wörtlich\nfür alle Schüler dieses Jahrgangs (keine Lerngruppen-Berechnung).\nleer = Spalte löschen, * = bestehende Zuordnung bleibt beim\nMNSpro-Import erhalten. Auslösen über 'Schüler.csv erstellen'\nim Dialog; der normale schueler_csv-Button bleibt unbeeinflusst.",
         }
         
         # Buttons in einem <x> times 4 Grid
@@ -160,8 +160,10 @@ class ReportApp(tk.Tk):
                 self.report_text.delete(1.0, tk.END)
                 self.report_text.insert(tk.END, self.generator.zuordnung_uebersicht())
             case "Schüler aufräumen":
-                self.report_text.insert(tk.END, self.generator.schueler_aufraeumen(self))
-                self.report_text.see(tk.END)
+                ergebnis = self.generator.edit_schueler_aufraeumen(self)
+                if ergebnis:
+                    self.report_text.insert(tk.END, ergebnis)
+                    self.report_text.see(tk.END)
             case "Statistik anzeigen":
                 self.show_statistik()
             case "show_objekt_by_id":

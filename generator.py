@@ -199,11 +199,14 @@ class Generator():
         self.zuordnung_overrides = {}     # {lerngruppen_id: Ziel-Schlüssel}, höchste Priorität
         self.besitzer_markieren = True    # Kursleiter (idsLehrer) beim Export als Besitzer ("^") markieren
         self.lehrer_ohne_kurs_exportieren = False
-        # {Ziel-Schlüssel: Wert} für den Button "Schüler aufräumen" (siehe schueler_aufraeumen()):
-        # fester Wert je Zielspalte, der WÖRTLICH für ALLE Schüler eingetragen wird (keine
-        # Lerngruppen-Berechnung). "*" (Standard) = MNSpro-Cloud-Konvention: beim Import bleibt
-        # die bestehende Zuordnung erhalten; "" = Spalte für ALLE Schüler leeren; alles andere
-        # wird wörtlich für ALLE Schüler eingetragen.
+        # {Jahrgang: {Ziel-Schlüssel: Wert}} für den Button "Schüler aufräumen" (siehe
+        # edit_schueler_aufraeumen()): pro Jahrgang ein fester Wert je Zielspalte. Wird NUR beim
+        # eigenen Export-Button "Schüler.csv erstellen" in jenem Dialog angewandt (writeSuSCSV mit
+        # jahrgangs_override) - der normale schueler_csv-Export ignoriert diese Werte komplett.
+        # "*" = MNSpro-Cloud-Konvention: beim Import bleibt die bestehende Zuordnung erhalten;
+        # "" = Spalte für alle Schüler dieses Jahrgangs leeren; alles andere wird wörtlich
+        # eingetragen. Jeder vorkommende Jahrgang bekommt beim Öffnen des Dialogs automatisch
+        # einen Eintrag (Standard: alle drei Spalten leer).
         self.schueler_aufraeumen_werte = {}
         sv.setConfig(self.base_url, (self.username, self.password))
         if os.path.exists("server.pem"):
@@ -773,13 +776,15 @@ class Generator():
         # Kürzel zurückgeben, falls vorhanden
         return jahrgang.get("kuerzelAnzeige")
     
-    def writeSuSCSV(self, statusList = [2], filename="Student.csv", spalten_override: dict | None = None):
+    def writeSuSCSV(self, statusList = [2], filename="Student.csv", jahrgangs_override: dict | None = None):
         # Status 2 - aktiv, 6 - extern
-        # spalten_override: {Ziel-Schlüssel: Wert}, siehe schueler_aufraeumen() - wenn gesetzt,
-        # wird die Lerngruppen-basierte Berechnung übersprungen und für ALLE Schüler stattdessen
-        # dieser feste Wert je Zielspalte geschrieben. "*" landet dabei WÖRTLICH in der Spalte -
-        # das ist kein Platzhalter für unser Tool, sondern eine MNSpro-Cloud-Konvention: beim
-        # Import bedeutet "*" dort "bestehende Zuordnung beibehalten". "" leert die Spalte.
+        # jahrgangs_override: {Jahrgang: {Ziel-Schlüssel: Wert}}, siehe edit_schueler_aufraeumen() -
+        # wird NUR gesetzt, wenn diese Methode über den Button "Schüler.csv erstellen" in jenem
+        # Dialog aufgerufen wird. Der normale schueler_csv-Export ruft writeSuSCSV() ohne diesen
+        # Parameter auf und bleibt dadurch komplett unbeeinflusst von self.schueler_aufraeumen_werte.
+        # Ist er gesetzt, entfällt die Lerngruppen-Berechnung komplett: für jeden Schüler wird je
+        # Zielspalte WÖRTLICH der für seinen Jahrgang hinterlegte Wert geschrieben ("*" = MNSpro-
+        # Cloud-Konvention "bestehende Zuordnung beim Import beibehalten", "" = Spalte leeren).
         ergText = ""
         countNoTeams = 0
         countNichtKlassifiziert = 0
@@ -813,10 +818,14 @@ class Generator():
                 vorname = s.get("vorname")
                 klasse = self.get_klasse_von_schueler(s.get("id"))
 
-                if spalten_override is not None:
-                    # Schüler aufräumen: keine Lerngruppen-Berechnung, für ALLE Schüler die
-                    # gleichen festen Werte je Zielspalte (siehe Kommentar oben zu "*").
-                    zielspalten_werte = [spalten_override.get(ziel, "") for ziel in self.ziel_spalten]
+                if jahrgangs_override is not None:
+                    # Schüler aufräumen: keine Lerngruppen-Berechnung, wörtlich der für den
+                    # Jahrgang hinterlegte Wert (fehlt der Jahrgang im Override, z.B. weil er dem
+                    # Schüler nicht zugeordnet ist, wird sicherheitshalber geleert statt normal
+                    # berechnet - siehe Docstring von edit_schueler_aufraeumen).
+                    jahrgang = self.get_jahrgang_von_schueler(s.get("id"))
+                    eintrag = jahrgangs_override.get(jahrgang, {})
+                    zielspalten_werte = [eintrag.get(ziel, "") for ziel in self.ziel_spalten]
                 else:
                     jahrgang = self.get_jahrgang_von_schueler(s.get("id")) # für Jahrgangsteams
                     ids_lerngruppen = s.get("idsLerngruppen", [])
@@ -852,16 +861,20 @@ class Generator():
                     nachname = replace_chars(nachname, my_char_map)
                     vorname = replace_chars(vorname, my_char_map)
                 writer.writerow([referenzId, vorname, nachname, klasse] + zielspalten_werte)
-        if spalten_override is not None:
-            for ziel, wert in spalten_override.items():
-                spaltenname = self.ziel_spalten.get(ziel, ziel)
-                if wert == "":
-                    beschreibung = "geleert"
-                elif wert == "*":
-                    beschreibung = "auf '*' gesetzt (MNSpro behält beim Import die bestehende Zuordnung)"
-                else:
-                    beschreibung = f"auf {wert!r} gesetzt"
-                ergText += f"ℹ️ Spalte '{spaltenname}' wurde für ALLE Schüler {beschreibung} (Lerngruppen-Zuordnung ignoriert)\n"
+        if jahrgangs_override is not None:
+            ergText += "ℹ️ Schüler aufräumen: Spaltenwerte wurden wörtlich je Jahrgang eingetragen, keine Lerngruppen-Berechnung:\n"
+            for jahrgang in sorted(jahrgangs_override):
+                eintrag = jahrgangs_override.get(jahrgang, {})
+                teile = []
+                for ziel, spaltenname in self.ziel_spalten.items():
+                    wert = eintrag.get(ziel, "")
+                    if wert == "":
+                        teile.append(f"{spaltenname}=geleert")
+                    elif wert == "*":
+                        teile.append(f"{spaltenname}='*' (bestehende Zuordnung bleibt beim Import erhalten)")
+                    else:
+                        teile.append(f"{spaltenname}={wert!r}")
+                ergText += f"   Jahrgang '{jahrgang}': {', '.join(teile)}\n"
         if countNoTeams > 0: ergText+=(f"ℹ️ Es wurden {countNoTeams} Verknüpfungen wegen nicht zu erstellender Teams verhindert\n")
         if countNichtKlassifiziert > 0:
             beispiele = ", ".join(sorted(nicht_klassifiziert_beispiele)[:10])
@@ -871,65 +884,96 @@ class Generator():
         self.exportedFlags["sus_extern_csv" if filename == "StudentExternal.csv" else "schueler_csv"] = True
         return ergText
 
-    def schueler_aufraeumen(self, master) -> str:
-        """Dialog + Export für den Button "Schüler aufräumen": legt pro Zielkategorie
-        (Arbeitsgruppe/Cloud#Kurs/Cloud#Gruppe, siehe self.ziel_spalten) einen festen Wert fest,
-        der beim Erstellen der Schüler-CSV WÖRTLICH für ALLE Schüler eingetragen wird - es werden
-        dabei gar keine Werte aus den Lerngruppen übernommen, die normale Berechnung entfällt
-        komplett. "*" (Standard) landet dabei buchstäblich in der Spalte - das ist eine
-        MNSpro-Cloud-Konvention: beim Import bedeutet "*" dort "bestehende Zuordnung beibehalten".
-        Leer = Spalte für alle Schüler löschen; alles andere wird ebenfalls wörtlich für jeden
-        Schüler eingetragen (z.B. eine feste Lizenzgruppe). Nützlich, um MNSpro-Cloud-Spalten
-        gezielt zurückzusetzen, ohne die Lerngruppen-Zuordnung selbst anzufassen.
-        Die eingegebenen Werte werden in self.schueler_aufraeumen_werte gemerkt (bleiben bis zur
-        nächsten Änderung vorbelegt). Gibt bei "Schüler.csv erstellen" den Exportbericht von
-        writeSuSCSV() zurück, sonst einen Abbruch-Hinweis - analog zu loescheLeereLerngruppen()."""
-        for ziel in self.ziel_spalten:
-            self.schueler_aufraeumen_werte.setdefault(ziel, "*")
+    def edit_schueler_aufraeumen(self, master) -> str:
+        """Dialog zur Pflege von self.schueler_aufraeumen_werte UND (über den eigenen Button
+        "Schüler.csv erstellen") zum Export einer davon komplett unabhängigen Sonder-Schüler-CSV:
+        pro Jahrgang, der aktuell unter den Schülern vorkommt, ein fester Wert je Zielkategorie
+        (Arbeitsgruppe/Cloud#Kurs/Cloud#Gruppe, siehe self.ziel_spalten) - analog zu
+        edit_kursart_zuordnung eine Zeile je vorkommendem Schlüssel (hier: Jahrgang statt
+        kursartKuerzel), Standardwert "" (leer). "*" landet dabei buchstäblich in der Spalte -
+        das ist eine MNSpro-Cloud-Konvention: beim Import bedeutet "*" dort "bestehende Zuordnung
+        beibehalten"; leer löscht die Spalte für alle Schüler dieses Jahrgangs; alles andere wird
+        wörtlich eingetragen (z.B. eine feste Lizenzgruppe).
+        WICHTIG: Der normale "schueler_csv"-Export (writeSuSCSV ohne jahrgangs_override) nimmt auf
+        diese Werte KEINE Rücksicht - die hier gepflegte CSV ist ein bewusst getrennter Vorgang,
+        ausgelöst nur über den Button "Schüler.csv erstellen" in diesem Dialog. Da JEDER
+        vorkommende Jahrgang einen Eintrag bekommt (Standard "leer"), wird beim Erstellen für
+        wirklich jeden Schüler eine der drei Regeln angewandt - es gibt keinen impliziten
+        Rückfall auf die Lerngruppen-Berechnung.
+        Mit "Speichern & Schließen" werden die Werte nur gemerkt (landen dann auch in status.json,
+        da self.schueler_aufraeumen_werte Teil von self.__dict__ ist), ohne CSV zu erzeugen.
+        Gibt bei "Schüler.csv erstellen" den Exportbericht von writeSuSCSV() zurück, sonst ""."""
+        if not hasattr(self, "schueler_aufraeumen_werte") or self.schueler_aufraeumen_werte is None:
+            self.schueler_aufraeumen_werte = {}
+
+        schueler = getattr(self, "schueler", [])
+        if not schueler:
+            messagebox.showinfo("Schüler aufräumen",
+                "Keine Schüler vorhanden - bitte zuerst Lerngruppen/Schüler holen.", parent=master)
+            return ""
+
+        alle_jahrgaenge = sorted({j for j in (self.get_jahrgang_von_schueler(s.get("id")) for s in schueler) if j})
+        anzahl = Counter(self.get_jahrgang_von_schueler(s.get("id")) for s in schueler)
+        # Für jeden vorkommenden Jahrgang einen Eintrag sicherstellen (Standard: alle drei Spalten leer)
+        for jahrgang in alle_jahrgaenge:
+            eintrag = self.schueler_aufraeumen_werte.setdefault(jahrgang, {})
+            for ziel in self.ziel_spalten:
+                eintrag.setdefault(ziel, "")
 
         win = tk.Toplevel(master)
-        win.title("Schüler aufräumen - feste Spaltenwerte für die Schüler-CSV")
+        win.title("Schüler aufräumen - feste Spaltenwerte je Jahrgang")
         win.transient(master)
         win.grab_set()
-        win.columnconfigure(1, weight=1)
+        win.columnconfigure(tuple(range(len(self.ziel_spalten) + 1)), weight=1)
 
-        ttk.Label(win, text="Fester Wert je Zielspalte, WÖRTLICH für ALLE Schüler (keine Lerngruppen-Berechnung):") \
-            .grid(row=0, column=0, columnspan=2, sticky="w", padx=8, pady=(10, 2))
-        info = ttk.Label(win, foreground="#555555", wraplength=420, justify="left",
-                          text='leer = Spalte für alle Schüler löschen   •   * = bestehende Zuordnung '
-                               'bleibt beim MNSpro-Import erhalten   •   sonst: dieser Text wird '
-                               'wörtlich für jeden Schüler eingetragen')
-        info.grid(row=1, column=0, columnspan=2, sticky="w", padx=8, pady=(0, 10))
+        ttk.Label(win, text="Jahrgang").grid(row=0, column=0, sticky="w", padx=8, pady=(10, 2))
+        for c, spaltenname in enumerate(self.ziel_spalten.values(), start=1):
+            ttk.Label(win, text=spaltenname).grid(row=0, column=c, sticky="w", padx=8, pady=(10, 2))
+        info = ttk.Label(win, foreground="#555555", wraplength=460, justify="left",
+                          text='leer = Spalte für alle Schüler dieses Jahrgangs löschen   •   '
+                               '* = bestehende Zuordnung bleibt beim MNSpro-Import erhalten   •   '
+                               'sonst: dieser Text wird wörtlich eingetragen')
+        info.grid(row=1, column=0, columnspan=len(self.ziel_spalten) + 1, sticky="w", padx=8, pady=(0, 8))
 
-        entries = {}
-        row = 2
-        for ziel, spaltenname in self.ziel_spalten.items():
-            ttk.Label(win, text=f"{spaltenname}:").grid(row=row, column=0, sticky="w", padx=8, pady=4)
-            e = ttk.Entry(win)
-            e.insert(0, self.schueler_aufraeumen_werte.get(ziel, "*"))
-            e.grid(row=row, column=1, sticky="ew", padx=8, pady=4)
-            entries[ziel] = e
-            row += 1
+        entries = {}  # Jahrgang -> {Ziel-Schlüssel: Entry-Widget}
+        for i, jahrgang in enumerate(alle_jahrgaenge, start=2):
+            ttk.Label(win, text=f"{jahrgang} ({anzahl[jahrgang]} Schüler)").grid(
+                row=i, column=0, sticky="w", padx=8, pady=2)
+            entries[jahrgang] = {}
+            for c, ziel in enumerate(self.ziel_spalten, start=1):
+                e = ttk.Entry(win, width=14)
+                e.insert(0, self.schueler_aufraeumen_werte[jahrgang].get(ziel, ""))
+                e.grid(row=i, column=c, sticky="ew", padx=8, pady=2)
+                entries[jahrgang][ziel] = e
+
+        def werte_uebernehmen():
+            for jahrgang, e_kategorien in entries.items():
+                self.schueler_aufraeumen_werte[jahrgang] = {ziel: e.get() for ziel, e in e_kategorien.items()}
 
         ergebnis = {"text": ""}
 
         def abbrechen():
             win.destroy()
 
-        def erstellen():
-            for ziel, e in entries.items():
-                self.schueler_aufraeumen_werte[ziel] = e.get()
+        def speichern_schliessen():
+            werte_uebernehmen()
             win.destroy()
-            ergebnis["text"] = self.writeSuSCSV(spalten_override=dict(self.schueler_aufraeumen_werte))
+
+        def erstellen():
+            werte_uebernehmen()
+            win.destroy()
+            ergebnis["text"] = self.writeSuSCSV(jahrgangs_override=dict(self.schueler_aufraeumen_werte))
 
         btns = ttk.Frame(win)
-        btns.grid(row=row, column=0, columnspan=2, sticky="e", padx=8, pady=8)
+        btns.grid(row=len(alle_jahrgaenge) + 2, column=0, columnspan=len(self.ziel_spalten) + 1,
+                  sticky="e", padx=8, pady=8)
         ttk.Button(btns, text="Abbrechen", command=abbrechen).pack(side="right", padx=6)
+        ttk.Button(btns, text="Speichern & Schließen", command=speichern_schliessen).pack(side="right", padx=6)
         ttk.Button(btns, text="Schüler.csv erstellen", command=erstellen).pack(side="right")
         win.protocol("WM_DELETE_WINDOW", abbrechen)
         win.wait_window()
 
-        return ergebnis["text"] or "Abgebrochen - keine Schüler-CSV erstellt.\n"
+        return ergebnis["text"]
 
     def writeLuLCSV(self):
         ergText = ""
