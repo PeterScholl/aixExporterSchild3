@@ -894,15 +894,19 @@ class Generator():
         das ist eine MNSpro-Cloud-Konvention: beim Import bedeutet "*" dort "bestehende Zuordnung
         beibehalten"; leer löscht die Spalte für alle Schüler dieses Jahrgangs; alles andere wird
         wörtlich eingetragen (z.B. eine feste Lizenzgruppe).
-        WICHTIG: Der normale "schueler_csv"-Export (writeSuSCSV ohne jahrgangs_override) nimmt auf
-        diese Werte KEINE Rücksicht - die hier gepflegte CSV ist ein bewusst getrennter Vorgang,
-        ausgelöst nur über den Button "Schüler.csv erstellen" in diesem Dialog. Da JEDER
+        WICHTIG: Der normale "schueler_csv"/"sus_extern_csv"-Export (writeSuSCSV ohne
+        jahrgangs_override) nimmt auf diese Werte KEINE Rücksicht - die hier gepflegte CSV ist ein
+        bewusst getrennter Vorgang, ausgelöst über zwei eigene Buttons in diesem Dialog: "Schüler.csv
+        erstellen (aktiv)" (Status 2, Datei Student_clean.csv) und "... (extern)" (Status 6, Datei
+        StudentExternal_clean.csv) - eigene Dateinamen ("_clean"-Suffix), damit sie sich von den
+        Dateien der normalen Export-Buttons unterscheiden. Da JEDER
         vorkommende Jahrgang einen Eintrag bekommt (Standard "leer"), wird beim Erstellen für
         wirklich jeden Schüler eine der drei Regeln angewandt - es gibt keinen impliziten
-        Rückfall auf die Lerngruppen-Berechnung.
+        Rückfall auf die Lerngruppen-Berechnung. Die Zeilenbeschriftung zeigt "aktiv/extern" an,
+        sofern für diesen Jahrgang externe Schüler vorkommen, sonst die Gesamtanzahl.
         Mit "Speichern & Schließen" werden die Werte nur gemerkt (landen dann auch in status.json,
         da self.schueler_aufraeumen_werte Teil von self.__dict__ ist), ohne CSV zu erzeugen.
-        Gibt bei "Schüler.csv erstellen" den Exportbericht von writeSuSCSV() zurück, sonst ""."""
+        Gibt bei "Schüler.csv erstellen (...)" den Exportbericht von writeSuSCSV() zurück, sonst ""."""
         if not hasattr(self, "schueler_aufraeumen_werte") or self.schueler_aufraeumen_werte is None:
             self.schueler_aufraeumen_werte = {}
 
@@ -913,7 +917,10 @@ class Generator():
             return ""
 
         alle_jahrgaenge = sorted({j for j in (self.get_jahrgang_von_schueler(s.get("id")) for s in schueler) if j})
-        anzahl = Counter(self.get_jahrgang_von_schueler(s.get("id")) for s in schueler)
+        jahrgaenge_je_schueler = {s.get("id"): self.get_jahrgang_von_schueler(s.get("id")) for s in schueler}
+        anzahl_aktiv = Counter(jahrgaenge_je_schueler[s.get("id")] for s in schueler if s.get("status") == 2)
+        anzahl_extern = Counter(jahrgaenge_je_schueler[s.get("id")] for s in schueler if s.get("status") == 6)
+        anzahl_gesamt = Counter(jahrgaenge_je_schueler.values())
         # Für jeden vorkommenden Jahrgang einen Eintrag sicherstellen (Standard: alle drei Spalten leer)
         for jahrgang in alle_jahrgaenge:
             eintrag = self.schueler_aufraeumen_werte.setdefault(jahrgang, {})
@@ -937,8 +944,11 @@ class Generator():
 
         entries = {}  # Jahrgang -> {Ziel-Schlüssel: Entry-Widget}
         for i, jahrgang in enumerate(alle_jahrgaenge, start=2):
-            ttk.Label(win, text=f"{jahrgang} ({anzahl[jahrgang]} Schüler)").grid(
-                row=i, column=0, sticky="w", padx=8, pady=2)
+            if anzahl_extern[jahrgang] > 0:
+                beschriftung = f"{jahrgang} (aktiv: {anzahl_aktiv[jahrgang]} / extern: {anzahl_extern[jahrgang]})"
+            else:
+                beschriftung = f"{jahrgang} ({anzahl_gesamt[jahrgang]} Schüler)"
+            ttk.Label(win, text=beschriftung).grid(row=i, column=0, sticky="w", padx=8, pady=2)
             entries[jahrgang] = {}
             for c, ziel in enumerate(self.ziel_spalten, start=1):
                 e = ttk.Entry(win, width=14)
@@ -959,17 +969,21 @@ class Generator():
             werte_uebernehmen()
             win.destroy()
 
-        def erstellen():
+        def erstellen(statusList, filename):
             werte_uebernehmen()
             win.destroy()
-            ergebnis["text"] = self.writeSuSCSV(jahrgangs_override=dict(self.schueler_aufraeumen_werte))
+            ergebnis["text"] = self.writeSuSCSV(statusList=statusList, filename=filename,
+                                                 jahrgangs_override=dict(self.schueler_aufraeumen_werte))
 
         btns = ttk.Frame(win)
         btns.grid(row=len(alle_jahrgaenge) + 2, column=0, columnspan=len(self.ziel_spalten) + 1,
                   sticky="e", padx=8, pady=8)
         ttk.Button(btns, text="Abbrechen", command=abbrechen).pack(side="right", padx=6)
         ttk.Button(btns, text="Speichern & Schließen", command=speichern_schliessen).pack(side="right", padx=6)
-        ttk.Button(btns, text="Schüler.csv erstellen", command=erstellen).pack(side="right")
+        ttk.Button(btns, text="Schüler.csv erstellen (extern)",
+                   command=lambda: erstellen([6], "StudentExternal_clean.csv")).pack(side="right", padx=(12, 6))
+        ttk.Button(btns, text="Schüler.csv erstellen (aktiv)",
+                   command=lambda: erstellen([2], "Student_clean.csv")).pack(side="right")
         win.protocol("WM_DELETE_WINDOW", abbrechen)
         win.wait_window()
 
