@@ -104,7 +104,8 @@ Beim Export von `lehrer_csv` werden Lehrkräfte automatisch mit `^` als Besitzer
 
 ### Kontrollfunktionen
 
-- **Statistik anzeigen** / **TempHilfsfunktion** geben einen allgemeinen Überblick über die geladenen Daten.
+- **Statistik anzeigen** gibt einen allgemeinen Überblick über die geladenen Daten.
+- **IDs prüfen** prüft für jede Lerngruppe, ob alle in `idsLehrer`/`idsSchueler` referenzierten IDs zu einem existierenden Lehrer bzw. Schüler gehören - z.B. um Karteileichen durch gelöschte/verschobene Personen in der Schild-DB zu finden.
 - **ListeTeamBez** listet alle vergebenen Team-Bezeichnungen alphabetisch auf, zum Prüfen auf Sinnhaftigkeit.
 - **ZuordnungUebersicht** ist der Kontrollschritt vor dem eigentlichen Export: zeigt je Zielkategorie (Arbeitsgruppe/Kurs/Gruppe) die betroffenen Lerngruppen, warnt vor nicht klassifizierten Lerngruppen und vor Team-Bezeichnungen, die in mehreren Zielkategorien gleichzeitig auftauchen.
 - **LeereLerngruppenLöschen** entfernt Lerngruppen ohne Schüler (z.B. in der Planungsphase eines Schuljahres hilfreich) und bereinigt dabei auch die Verweise bei Lehrern/Schülern, im Lookup-Dict und bei Kursart-Overrides. Voraussetzung: `idsSchuelerZuLerngruppen` muss vorher gelaufen sein; fragt vor dem Löschen zur Sicherheit nach.

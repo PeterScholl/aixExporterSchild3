@@ -53,7 +53,7 @@ class ReportApp(tk.Tk):
             "L-ReferenzIDs aus kuerzel", "Jahrgangsteams", "idsLerngruppenZuLehrern","idsKlassenleitungenZuLehrern",
             "Teams nicht erstellen", "schueler_csv", "sus_extern_csv", "lehrer_csv",
             "ClearScreen", "show_objekt_by_id", "LeereLerngruppenLöschen", "ErgänzeSchülerAusDB",
-            "ListeTeamBez","Übersicht Lernplattformen","TempHilfsfunktion","ErgänzeLehrerAusDB",
+            "ListeTeamBez","Übersicht Lernplattformen","IDs prüfen","ErgänzeLehrerAusDB",
             "BezeichnungsMusterBearbeiten", "ZuordnungUebersicht", "Schüler aufräumen"
         ]
 
@@ -81,6 +81,7 @@ class ReportApp(tk.Tk):
             "BezeichnungsMusterBearbeiten": "Regex-Muster auf die Team-Bezeichnung einer Lerngruppe,\ndie VOR der kursartKuerzel-Regel über die Zielkategorie\n(Arbeitsgruppe/Cloud#Kurs/Cloud#Gruppe) entscheiden.\nReihenfolge in der Liste = Priorität, erstes Match gewinnt.",
             "ZuordnungUebersicht": "Kontrolle vor dem Export: zeigt je Zielkategorie\n(Arbeitsgruppe/Cloud#Kurs/Cloud#Gruppe) die betroffenen Lerngruppen,\nwarnt vor nicht klassifizierten Lerngruppen und vor Team-Bezeichnungen,\ndie in mehreren Zielkategorien gleichzeitig auftauchen.",
             "Schüler aufräumen": "Eigener, vom normalen schueler_csv-Export komplett unabhängiger\nExport: pro Jahrgang ein fester Wert je Zielspalte, wörtlich\nfür alle Schüler dieses Jahrgangs (keine Lerngruppen-Berechnung).\nleer = Spalte löschen, * = bestehende Zuordnung bleibt beim\nMNSpro-Import erhalten. Auslösen über 'Schüler.csv erstellen'\nim Dialog; der normale schueler_csv-Button bleibt unbeeinflusst.",
+            "IDs prüfen": "Prüft für jede Lerngruppe, ob alle in idsLehrer/idsSchueler\nreferenzierten IDs zu einem existierenden Lehrer bzw. Schüler\ngehören - z.B. um Karteileichen durch gelöschte/verschobene\nPersonen in der Schild-DB zu finden.",
         }
         
         # Buttons in einem <x> times 4 Grid
@@ -192,8 +193,8 @@ class ReportApp(tk.Tk):
             case "TeamBezErstellen":
                 self.report_text.insert(tk.END, self.generator.addTeamBezZuLerngruppen())
                 self.report_text.see(tk.END)
-            case "TempHilfsfunktion":
-                self.tempHIlfsfunktion()
+            case "IDs prüfen":
+                self.report_text.insert(tk.END, self.generator.pruefe_ids_in_lerngruppen())
                 self.report_text.see(tk.END)
             case "ReferenzIDs aus SuS-Ids":
                 count = 0
@@ -549,39 +550,12 @@ class ReportApp(tk.Tk):
         win.grab_set()
         win.wait_window()
 
-    def tempHIlfsfunktion(self):
-        res = collect_values(getattr(self.generator,"lerngruppen",[]),"kursartKuerzel")
-        self.report_text.insert(tk.END,f"Es gibt folgende kursartKuerzel: {res}\n")
-        res = collect_values(getattr(self.generator,"schueler",[]),"status")
-        self.report_text.insert(tk.END,f"Es gibt folgende Status-Werte bei den SuS: {res}\n")
-        lg_pro_jahrgang = count_lerngruppen_pro_jahrgang(getattr(self.generator, "lerngruppen", []))
-        self.report_text.insert(tk.END,f"Es gibt folgende Anzahl Lerngruppen in jedem Jahrgang:\n{lg_pro_jahrgang}\n")
-        # Klassen der Schüler einer zufälligen Lerngruppe ausgeben
-        rnd_lg = random.choice(getattr(self.generator, "lerngruppen", [-1]))
-        rnd_lg_bez = rnd_lg.get("teamBez", rnd_lg.get("bezeichnung", "---"))
-        ergText = f"In der Lergruppe {rnd_lg_bez} sind die folgenden Klassen {self.generator.get_kl_jg_zu_schuelerIDListe(rnd_lg.get('idsSchueler',[]))}\n"
-        ergText += f"bzw. die folgenden Jahrgänge {self.generator.get_kl_jg_zu_schuelerIDListe(rnd_lg.get('idsSchueler',[]), art='jahrgaenge')}\n"
-        self.report_text.insert(tk.END, ergText)
-
 def collect_values(objs, key, unique=True):
     """Gibt alle vorkommenden Werte zu einem Key aus einer Liste von Dicts zurück."""
     if unique:
         return list({obj.get(key) for obj in objs if key in obj})
-    else: 
+    else:
         return [obj.get(key) for obj in objs if key in obj]
-
-
-def count_lerngruppen_pro_jahrgang(lerngruppen):
-    counts = {}
-
-    for lg in lerngruppen:
-        jg = lg.get("jahrgang")
-        if not jg:        # None oder fehlt
-            jg = "ohne"
-        counts[jg] = counts.get(jg, 0) + 1 #Wenn nicht vorhanden auf 0 setzen
-
-    return counts
-
 
 
 # Anwendung starten

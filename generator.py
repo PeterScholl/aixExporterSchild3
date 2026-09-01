@@ -426,6 +426,45 @@ class Generator():
 
         return count
 
+    def pruefe_ids_in_lerngruppen(self) -> str:
+        """Prüft für jede Lerngruppe, ob alle in idsLehrer/idsSchueler referenzierten IDs
+        tatsächlich zu einem existierenden Lehrer bzw. Schüler gehören (self.lookupDict) - z.B.
+        um Karteileichen durch gelöschte/verschobene Personen in der Schild-DB zu finden. Andere
+        ID-Verweise (idsLerngruppen bei Schülern/Lehrern, idsKlassenleitung, ...) werden hier
+        bewusst nicht geprüft, weil sie an anderer Stelle (z.B. beim CSV-Export) ohnehin auffallen
+        würden. Gibt für jede betroffene Lerngruppe eine Zeile im Format
+        "Lerngruppe {id} mit teamBez {...}: Lehrer mit ID ... fehlt, Schüler mit IDs ... fehlen"
+        zurück, oder eine Erfolgsmeldung, wenn keine fehlenden IDs gefunden wurden."""
+        if not self.lookupDict.get("lehrer") or not self.lookupDict.get("schueler"):
+            self.generateLookups()
+        lookup_lehrer = self.lookupDict.get("lehrer", {})
+        lookup_schueler = self.lookupDict.get("schueler", {})
+
+        def teil(ids: list, bezeichnung: str) -> str | None:
+            if not ids:
+                return None
+            ids_str = ", ".join(str(i) for i in ids)
+            if len(ids) == 1:
+                return f"{bezeichnung} mit ID {ids_str} fehlt"
+            return f"{bezeichnung} mit IDs {ids_str} fehlen"
+
+        ergText = ""
+        anzahl_betroffen = 0
+        for lg in getattr(self, "lerngruppen", []):
+            fehlende_lehrer = [lid for lid in lg.get("idsLehrer", []) if lid not in lookup_lehrer]
+            fehlende_schueler = [sid for sid in lg.get("idsSchueler", []) if sid not in lookup_schueler]
+            teile = [t for t in (teil(fehlende_lehrer, "Lehrer"), teil(fehlende_schueler, "Schüler")) if t]
+            if teile:
+                anzahl_betroffen += 1
+                bez = lg.get("teamBez") or lg.get("bezeichnung") or "?"
+                ergText += f"⚠️ Lerngruppe {lg.get('id', '?')} mit teamBez {bez}: {', '.join(teile)}\n"
+
+        if anzahl_betroffen:
+            ergText += f"❌ {anzahl_betroffen} von {len(getattr(self, 'lerngruppen', []))} Lerngruppen haben fehlende ID-Referenzen\n"
+        else:
+            ergText += f"✅ Alle ID-Referenzen (idsLehrer/idsSchueler) in {len(getattr(self, 'lerngruppen', []))} Lerngruppen sind gültig\n"
+        return ergText
+
     def loescheLeereLerngruppen(self, master=None) -> str:
         """Entfernt alle Lerngruppen ohne Schüler (idsSchueler leer oder fehlend) aus den Daten und
         bereinigt dabei alle Verweise auf ihre ID in anderen Elementen:
