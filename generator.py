@@ -208,6 +208,11 @@ class Generator():
         # eingetragen. Jeder vorkommende Jahrgang bekommt beim Öffnen des Dialogs automatisch
         # einen Eintrag (Standard: alle drei Spalten leer).
         self.schueler_aufraeumen_werte = {}
+        # {art: {idBez-Wert: Referenz-ID}} für import_referenz_ids()/"Referenz-IDs aus File" bzw.
+        # "LehrerReferenzen aus File" (art = "schueler" bzw. "lehrer") - gemerkte Zuordnung aus der
+        # zuletzt eingelesenen CSV-Datei, damit man beim nächsten Mal nicht erneut die Datei
+        # auswählen und die Spalten zuordnen muss (siehe _frage_json_oder_datei()).
+        self.referenz_id_mapping = {}
         sv.setConfig(self.base_url, (self.username, self.password))
         if os.path.exists("server.pem"):
             sv.verify="server.pem"
@@ -1138,8 +1143,77 @@ class Generator():
         self.exportedFlags["lehrer_csv"] = True
         return ergText
 
+    def _frage_json_oder_datei(self, master, art_label: str) -> str:
+        """Kleiner Rückfrage-Dialog für import_referenz_ids(): wenn für `art` bereits eine
+        Referenz-ID-Zuordnung in self.referenz_id_mapping (und damit in status.json) gespeichert
+        ist, fragt diese Funktion, ob sie wiederverwendet oder eine neue Datei geöffnet werden
+        soll. Gibt "json", "datei" oder "abbrechen" zurück."""
+        win = tk.Toplevel(master)
+        win.title("Referenz-IDs")
+        win.transient(master)
+        win.grab_set()
+
+        ttk.Label(win, justify="left", wraplength=360,
+                  text=f"Es sind bereits gespeicherte Referenz-IDs für {art_label} vorhanden.\n"
+                       "Was möchtest du tun?").pack(padx=16, pady=(16, 10))
+
+        antwort = {"wert": "abbrechen"}
+
+        def waehlen(wert):
+            antwort["wert"] = wert
+            win.destroy()
+
+        btns = ttk.Frame(win)
+        btns.pack(padx=16, pady=(0, 16))
+        ttk.Button(btns, text="Daten aus JSON verwenden", command=lambda: waehlen("json")).pack(side="left", padx=4)
+        ttk.Button(btns, text="Datei öffnen", command=lambda: waehlen("datei")).pack(side="left", padx=4)
+        ttk.Button(btns, text="Abbrechen", command=lambda: waehlen("abbrechen")).pack(side="left", padx=4)
+        win.protocol("WM_DELETE_WINDOW", lambda: waehlen("abbrechen"))
+        win.wait_window()
+        return antwort["wert"]
+
+    def _wende_referenz_id_mapping_an(self, mapping: dict, art: str, idBez: str) -> str:
+        """Trägt eine {idBez-Wert: Referenz-ID}-Zuordnung in alle Objekte von self.<art> ein
+        (Schritt "Objekte aktualisieren" von import_referenz_ids, ausgelagert, damit er sowohl
+        nach dem Einlesen einer neuen Datei als auch bei Wiederverwendung der in
+        self.referenz_id_mapping/status.json gespeicherten Zuordnung genutzt werden kann).
+        JSON kennt nur String-Schlüssel - beim Speichern/Laden über status.json werden z.B.
+        numerische Schüler-IDs also zu Strings ("123" statt 123). Deshalb hier zusätzlich mit
+        str(objid) nachschlagen, falls der Wert selbst nicht passt."""
+        count_ref = 0
+        count_id = 0
+        for obj in getattr(self, art, []):
+            objid = obj.get(idBez)
+            ref = mapping[objid] if objid in mapping else mapping.get(str(objid))
+            if ref is not None:
+                obj["referenzId"] = ref
+                count_ref += 1
+            else:
+                obj["referenzId"] = objid
+                print(f"ACHTUNG: {objid} erhält keine Referenz-ID")
+                count_id += 1
+        return f"{count_ref} Referenz-IDs zugewisen - {count_id} mal die {idBez} als Referenz\n"
+
     def import_referenz_ids(self, master, art="schueler", idBez="id"):
-        """CSV wählen, Spalten für Schüler-ID und Referenz-ID wählen und zuweisen."""
+        """CSV wählen, Spalten für ID und Referenz-ID wählen und zuweisen. Die eingelesene
+        Zuordnung wird in self.referenz_id_mapping[art] gemerkt (landet damit auch in
+        status.json, da Teil von self.__dict__). Ist für `art` bereits eine Zuordnung gespeichert,
+        wird vor dem Dateiauswahl-Dialog gefragt, ob diese wiederverwendet werden soll (siehe
+        _frage_json_oder_datei) - so muss man die Zuordnungsdatei nicht bei jedem Programmstart
+        erneut einlesen."""
+        if not hasattr(self, "referenz_id_mapping") or self.referenz_id_mapping is None:
+            self.referenz_id_mapping = {}
+
+        gespeicherte_mapping = self.referenz_id_mapping.get(art)
+        if gespeicherte_mapping:
+            art_label = {"schueler": "Schüler", "lehrer": "Lehrer"}.get(art, art)
+            wahl = self._frage_json_oder_datei(master, art_label)
+            if wahl == "abbrechen":
+                return "Abgebrochen\n"
+            if wahl == "json":
+                return self._wende_referenz_id_mapping_an(gespeicherte_mapping, art, idBez)
+            # sonst: wahl == "datei" -> unten wie gewohnt eine neue Datei einlesen
+
         # CSV-Datei auswählen
         filepath = filedialog.askopenfilename(
             parent=master,
@@ -1196,25 +1270,12 @@ class Generator():
 
         if "mapping" not in result:
             return "FEHLER: Es konnte keine Zuordnung erstellt werden\n"
-        
-        print(result["mapping"])
 
-        # Objekte aktualisieren
-        count_ref = 0
-        count_id = 0
-        for obj in getattr(self, art, []):
-            objid = obj.get(idBez)
-            print(objid)
-            if objid in result["mapping"]:
-                obj["referenzId"] = result["mapping"][objid]
-                count_ref+=1
-            else:
-                obj["referenzId"] = objid
-                print(f"ACHTUNG: {objid} erhält keine Referenz-ID")
-                count_id+=1
+        # Zuordnung merken (landet über self.__dict__ auch in status.json), damit sie beim
+        # nächsten Mal wiederverwendet werden kann.
+        self.referenz_id_mapping[art] = result["mapping"]
 
-        print(f"{len(result['mapping'])} Referenz-IDs zugewiesen.")
-        return f"{count_ref} Referenz-IDs zugewisen - {count_id} mal die {idBez} als Referenz\n"
+        return self._wende_referenz_id_mapping_an(result["mapping"], art, idBez)
 
     def normalisiere_jahrgangsteams(self) -> str:
         """Migriert self.jahrgangsteams vom alten Format ({jahrgang: [Namen]}) auf das neue
