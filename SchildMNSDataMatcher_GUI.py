@@ -24,6 +24,7 @@ class ReportApp(tk.Tk):
         # als Buttons im Grid; Werkzeuge und selten geänderte/dauerhafte Einstellungen wurden in
         # die beiden Dropdowns "Werkzeuge"/"Dauerhafte Einstellungen" ausgelagert (siehe unten).
         button_texts = [
+            "Auto",
             "Verbindungseinstellung", "Abschnitts-ID holen", "Lerngruppen holen",
             "idsSchuelerZuLerngruppen", "TeamBezErstellen",
             "KursartZuordnung", "Referenz-IDs aus File", "ReferenzIDs aus SuS-Ids", "LehrerReferenzen aus File",
@@ -46,6 +47,7 @@ class ReportApp(tk.Tk):
         ]
 
         tooltip = {
+            "Auto": "Arbeitet den grünen Pflichtpfad automatisch Schritt für Schritt ab,\nbis alles erledigt ist oder eine manuelle Entscheidung nötig wird\n(z.B. Kursart-Zuordnung für ein neues Kürzel, oder eine noch nicht\ngespeicherte Referenz-ID-Datei). Zeigt am Ende auch alle aktuell\nwirksamen 'Dauerhaften Einstellungen' an.",
             "Abschnitts-ID holen": "Holt die Datenbank ID des LernAbschnitts\nErster Test der Verbindung und Authentifizierung\nevtl. Fehlermeldung in der Console",
             "Lerngruppen holen": "Hauptfunktion\nHolt die Lerngruppen - aktuell lms.logineo\nLehrer- und Schülerzuordnung",
             "Statistik anzeigen": "Zeigt die Anzahl der Einträge in den verschiedenen Listen an\nund gibt zufällige Beispiele aus",
@@ -156,6 +158,12 @@ class ReportApp(tk.Tk):
     def button_clicked(self, text):
         print(f"Button '{text}' clicked")
         match text:
+            case "Auto":
+                # Bisherigen Inhalt NICHT löschen (wie bei den meisten anderen Buttons auch) -
+                # Auto hängt seinen Bericht nur an, damit z.B. die Meldungen von "Load state"
+                # weiter sichtbar bleiben, wenn man hochscrollt.
+                self.report_text.insert(tk.END, "\n----- Auto -----\n" + self.generator.auto_ablauf())
+                self.report_text.see(tk.END)
             case "Verbindungseinstellung":
                 self.generator.configValues(self)
                 self.report_text.insert(tk.END, "Konfiguration durchgeführt - Menu speichern?\n")

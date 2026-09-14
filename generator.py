@@ -165,6 +165,144 @@ class Generator():
 
         return states
 
+    def auto_ablauf(self) -> str:
+        """Arbeitet den "grünen" Pflicht-Standardpfad (self.REQUIRED_CHAIN, siehe
+        get_button_states) automatisch ab, ein Schritt nach dem anderen, bis entweder alles
+        erledigt ist oder ein Schritt eine manuelle Entscheidung braucht, die sich nicht sicher
+        raten lässt - Kursart-Zuordnung für ein neues kursartKuerzel, oder eine Referenz-ID-Datei
+        für Schüler/Lehrer, die noch nicht in status.json gespeichert ist (siehe
+        self.referenz_id_mapping/import_referenz_ids). In diesem Fall stoppt der Ablauf genau
+        dort (⛔-Zeile) und nennt, was jetzt manuell nötig ist - läuft NIE selbst einen Dialog auf.
+        Am Ende steht immer eine Übersicht über aktuell wirksame "Dauerhafte Einstellungen"
+        (TeamBez-Rewrite/Jahrgangsteams/Teams nicht erstellen/Bezeichnungs-Muster/eigenes
+        Server-Zertifikat), damit deren Auswirkung auf den (automatischen) Export nicht
+        übersehen wird."""
+        protokoll = []
+
+        if not self.password:
+            protokoll.append("⛔ Kein Passwort gesetzt - bitte zuerst über 'Verbindungseinstellung' anmelden.")
+            return self._auto_bericht(protokoll, abgeschlossen=False)
+
+        # "Lerngruppen holen" (und damit implizit auch die Abschnitts-ID, die lerngruppenHolen()
+        # ohnehin selbst neu ermittelt) soll Auto IMMER frisch von der SVWS-Datenbank neu holen,
+        # statt sich auf ggf. veraltete, aus status.json geladene Daten zu verlassen - alle
+        # nachgelagerten Schritte (idsSchuelerZuLerngruppen, TeamBez, ...) erkennen die frischen
+        # Lerngruppen ohnehin automatisch als "noch nicht erledigt" und werden dadurch von selbst
+        # neu ausgeführt.
+        IMMER_NEU_AUSFUEHREN = {WorkflowStep.LERNGRUPPEN_GEHOLT}
+
+        for step, _buttons, done_fn in self.REQUIRED_CHAIN:
+            if done_fn(self) and step not in IMMER_NEU_AUSFUEHREN:
+                # Auch bereits erledigte Schritte protokollieren (z.B. weil idsSchueler/teamBez
+                # schon aus der geladenen status.json vorhanden sind) - sonst verschwinden sie
+                # sang- und klanglos aus dem Bericht, statt als "schon erledigt" sichtbar zu sein.
+                protokoll.append(f"✔️ {step.value} (bereits erledigt)")
+                continue
+
+            if step == WorkflowStep.ABSCHNITT_VERBUNDEN:
+                if not self.initAbschnittsID():
+                    protokoll.append("⛔ Abschnitts-ID konnte nicht ermittelt werden (siehe Console) - bitte Verbindungseinstellungen prüfen.")
+                    return self._auto_bericht(protokoll, abgeschlossen=False)
+                protokoll.append(f"✅ Abschnitts-ID geholt: {self.svws_abschnitts_id}")
+
+            elif step == WorkflowStep.LERNGRUPPEN_GEHOLT:
+                if not self.lerngruppenHolen():
+                    protokoll.append("⛔ Lerngruppen konnten nicht geholt werden (siehe Console) - bitte Verbindungseinstellungen prüfen.")
+                    return self._auto_bericht(protokoll, abgeschlossen=False)
+                protokoll.append(f"✅ {len(self.lerngruppen)} Lerngruppen geholt")
+
+            elif step == WorkflowStep.LOOKUPS_ERSTELLT:
+                self.generateLookups()
+                protokoll.append("✅ Lookup-Dictionaries erstellt")
+
+            elif step == WorkflowStep.SCHUELER_ZU_LERNGRUPPEN:
+                anzahl = self.addSuSIdsZuLerngruppen()
+                protokoll.append(f"✅ {anzahl} Schüler-Verknüpfungen zu Lerngruppen erstellt")
+
+            elif step == WorkflowStep.TEAMBEZ_ERSTELLT:
+                protokoll.append(self.addTeamBezZuLerngruppen().rstrip("\n"))
+
+            elif step == WorkflowStep.KURSART_ZUORDNUNG:
+                fehlend = self.fehlende_kursart_zuordnungen()
+                protokoll.append(f"⛔ Kursart-Zuordnung unvollständig für: {', '.join(fehlend)} "
+                                  f"- bitte manuell im Werkzeug 'KursartZuordnung' festlegen.")
+                return self._auto_bericht(protokoll, abgeschlossen=False)
+
+            elif step == WorkflowStep.REFERENZ_IDS_SCHUELER:
+                mapping = self.referenz_id_mapping.get("schueler")
+                if not mapping:
+                    protokoll.append("⛔ Für Schüler ist noch keine Referenz-ID-Zuordnung in status.json gespeichert "
+                                      "- bitte einmal manuell 'Referenz-IDs aus File' ausführen (oder alternativ "
+                                      "'ReferenzIDs aus SuS-Ids', falls die SVWS-IDs 1:1 als Referenz übernommen werden sollen).")
+                    return self._auto_bericht(protokoll, abgeschlossen=False)
+                protokoll.append(self._wende_referenz_id_mapping_an(mapping, "schueler", "id").rstrip("\n"))
+
+            elif step == WorkflowStep.LERNGRUPPEN_ZU_LEHRERN:
+                anzahl = self.addLerngruppenIdsZuLuL()
+                protokoll.append(f"✅ {anzahl} Lerngruppen-Verknüpfungen zu Lehrern erstellt")
+
+            elif step == WorkflowStep.KLASSENLEITUNG_ZU_LEHRERN:
+                anzahl = self.addKlassenleitungsIdsZuLuL()
+                protokoll.append(f"✅ {anzahl} Klassenleitungs-Verknüpfungen zu Lehrern erstellt")
+
+            elif step == WorkflowStep.REFERENZ_IDS_LEHRER:
+                mapping = self.referenz_id_mapping.get("lehrer")
+                if not mapping:
+                    protokoll.append("⛔ Für Lehrer ist noch keine Referenz-ID-Zuordnung in status.json gespeichert "
+                                      "- bitte einmal manuell 'LehrerReferenzen aus File' ausführen (oder alternativ "
+                                      "'L-ReferenzIDs aus kuerzel').")
+                    return self._auto_bericht(protokoll, abgeschlossen=False)
+                protokoll.append(self._wende_referenz_id_mapping_an(mapping, "lehrer", "kuerzel").rstrip("\n"))
+
+            elif step == WorkflowStep.SCHUELER_CSV:
+                protokoll.append(self.writeSuSCSV().rstrip("\n"))
+
+            elif step == WorkflowStep.SUS_EXTERN_CSV:
+                protokoll.append(self.writeSuSCSV(statusList=[6], filename="StudentExternal.csv").rstrip("\n"))
+
+            elif step == WorkflowStep.LEHRER_CSV:
+                protokoll.append(self.writeLuLCSV().rstrip("\n"))
+
+        return self._auto_bericht(protokoll, abgeschlossen=True)
+
+    def _auto_bericht(self, protokoll: list, abgeschlossen: bool) -> str:
+        """Baut den Ergebnistext von auto_ablauf() zusammen: Protokoll der ausgeführten Schritte,
+        Erfolgs-/Stopp-Meldung, und - deutlich abgesetzt - alle aktuell wirksamen "Dauerhaften
+        Einstellungen", damit sie im Übersichtsfenster (Report-Textfeld) nicht untergehen."""
+        text = "\n".join(protokoll) + "\n\n"
+        if abgeschlossen:
+            text += "✅ Automatischer Ablauf komplett durchgelaufen - alle Pflichtschritte erledigt.\n"
+        else:
+            text += "⏸️ Automatischer Ablauf angehalten - siehe ⛔-Zeile oben für den nötigen manuellen Schritt.\n"
+
+        besonderheiten = self._besonderheiten_dauerhafte_einstellungen()
+        if besonderheiten:
+            text += "\n⚠️⚠️⚠️ BESONDERHEITEN durch 'Dauerhafte Einstellungen' (bitte beachten) ⚠️⚠️⚠️\n" + besonderheiten
+        return text
+
+    def _besonderheiten_dauerhafte_einstellungen(self) -> str:
+        """Listet alle aktuell konfigurierten 'Dauerhaften Einstellungen' auf (siehe Dropdown im
+        Hauptfenster: Serverzertifikat laden, TeamBezRewriteBearbeiten, Jahrgangsteams, Teams
+        nicht erstellen, BezeichnungsMusterBearbeiten) - Grundlage für den Besonderheiten-Absatz
+        in _auto_bericht(), damit sie beim automatischen Ablauf nicht unbemerkt mitwirken."""
+        zeilen = []
+        if self.teambez_rewrite:
+            zeilen.append(f"- TeamBez-Rewrite: {len(self.teambez_rewrite)} Regel(n) aktiv "
+                           f"({'; '.join(r.get('pattern','') for r in self.teambez_rewrite)})")
+        jahrgangsteams_aktiv = sorted(
+            jg for jg, eintrag in self.jahrgangsteams.items()
+            if any(eintrag.get(ziel) for ziel in self.ziel_spalten)
+        )
+        if jahrgangsteams_aktiv:
+            zeilen.append(f"- Jahrgangsteams konfiguriert für: {', '.join(jahrgangsteams_aktiv)}")
+        if self.noTeams:
+            zeilen.append(f"- {len(self.noTeams)} Team(s) von der Erstellung ausgeschlossen (Teams nicht erstellen)")
+        if self.bezeichnung_muster:
+            zeilen.append(f"- {len(self.bezeichnung_muster)} Bezeichnungs-Muster (Regex) aktiv")
+        if os.path.exists("server.pem"):
+            zeilen.append("- Eigenes Server-Zertifikat (server.pem) wird zur Verifizierung verwendet")
+        return "\n".join(zeilen) + ("\n" if zeilen else "")
+
     def __init__(self):
         self.host = "nightly.svws-nrw.de"
         self.schema="GymAbiLite"
