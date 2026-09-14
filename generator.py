@@ -167,12 +167,15 @@ class Generator():
 
     def auto_ablauf(self) -> str:
         """Arbeitet den "grünen" Pflicht-Standardpfad (self.REQUIRED_CHAIN, siehe
-        get_button_states) automatisch ab, ein Schritt nach dem anderen, bis entweder alles
-        erledigt ist oder ein Schritt eine manuelle Entscheidung braucht, die sich nicht sicher
-        raten lässt - Kursart-Zuordnung für ein neues kursartKuerzel, oder eine Referenz-ID-Datei
-        für Schüler/Lehrer, die noch nicht in status.json gespeichert ist (siehe
-        self.referenz_id_mapping/import_referenz_ids). In diesem Fall stoppt der Ablauf genau
-        dort (⛔-Zeile) und nennt, was jetzt manuell nötig ist - läuft NIE selbst einen Dialog auf.
+        get_button_states) automatisch ab, ein Schritt nach dem anderen, bis entweder alle
+        Vorbereitungsschritte erledigt sind oder ein Schritt eine manuelle Entscheidung braucht,
+        die sich nicht sicher raten lässt - Kursart-Zuordnung für ein neues kursartKuerzel, oder
+        eine Referenz-ID-Datei für Schüler/Lehrer, die noch nicht in status.json gespeichert ist
+        (siehe self.referenz_id_mapping/import_referenz_ids). In diesem Fall stoppt der Ablauf
+        genau dort (⛔-Zeile) und nennt, was jetzt manuell nötig ist - läuft NIE selbst einen
+        Dialog auf. Die drei CSV-Exporte (schueler_csv/sus_extern_csv/lehrer_csv) werden bewusst
+        NICHT automatisch erstellt, sondern bleiben ein manueller, expliziter letzter Schritt
+        (siehe ➡️-Zeilen) - z.B. um vorher nochmal ZuordnungUebersicht zu prüfen.
         Am Ende steht immer eine Übersicht über aktuell wirksame "Dauerhafte Einstellungen"
         (TeamBez-Rewrite/Jahrgangsteams/Teams nicht erstellen/Bezeichnungs-Muster/eigenes
         Server-Zertifikat), damit deren Auswirkung auf den (automatischen) Export nicht
@@ -190,8 +193,21 @@ class Generator():
         # Lerngruppen ohnehin automatisch als "noch nicht erledigt" und werden dadurch von selbst
         # neu ausgeführt.
         IMMER_NEU_AUSFUEHREN = {WorkflowStep.LERNGRUPPEN_GEHOLT}
+        # Die drei CSV-Exporte laufen bei Auto NICHT automatisch mit - das soll bewusst manuell
+        # über den jeweiligen Button ausgelöst werden (z.B. um vorher nochmal ZuordnungUebersicht
+        # zu prüfen), Auto bereitet nur alles Nötige dafür vor.
+        EXPORT_MANUELL = {WorkflowStep.SCHUELER_CSV, WorkflowStep.SUS_EXTERN_CSV, WorkflowStep.LEHRER_CSV}
+        export_ausstehend = False
 
         for step, _buttons, done_fn in self.REQUIRED_CHAIN:
+            if step in EXPORT_MANUELL:
+                if done_fn(self):
+                    protokoll.append(f"✔️ {step.value} (bereits erledigt)")
+                else:
+                    export_ausstehend = True
+                    protokoll.append(f"➡️ {step.value} - bitte manuell über den passenden Button erstellen")
+                continue
+
             if done_fn(self) and step not in IMMER_NEU_AUSFUEHREN:
                 # Auch bereits erledigte Schritte protokollieren (z.B. weil idsSchueler/teamBez
                 # schon aus der geladenen status.json vorhanden sind) - sonst verschwinden sie
@@ -254,26 +270,22 @@ class Generator():
                     return self._auto_bericht(protokoll, abgeschlossen=False)
                 protokoll.append(self._wende_referenz_id_mapping_an(mapping, "lehrer", "kuerzel").rstrip("\n"))
 
-            elif step == WorkflowStep.SCHUELER_CSV:
-                protokoll.append(self.writeSuSCSV().rstrip("\n"))
+        return self._auto_bericht(protokoll, abgeschlossen=True, export_ausstehend=export_ausstehend)
 
-            elif step == WorkflowStep.SUS_EXTERN_CSV:
-                protokoll.append(self.writeSuSCSV(statusList=[6], filename="StudentExternal.csv").rstrip("\n"))
-
-            elif step == WorkflowStep.LEHRER_CSV:
-                protokoll.append(self.writeLuLCSV().rstrip("\n"))
-
-        return self._auto_bericht(protokoll, abgeschlossen=True)
-
-    def _auto_bericht(self, protokoll: list, abgeschlossen: bool) -> str:
+    def _auto_bericht(self, protokoll: list, abgeschlossen: bool, export_ausstehend: bool = False) -> str:
         """Baut den Ergebnistext von auto_ablauf() zusammen: Protokoll der ausgeführten Schritte,
         Erfolgs-/Stopp-Meldung, und - deutlich abgesetzt - alle aktuell wirksamen "Dauerhaften
-        Einstellungen", damit sie im Übersichtsfenster (Report-Textfeld) nicht untergehen."""
+        Einstellungen", damit sie im Übersichtsfenster (Report-Textfeld) nicht untergehen.
+        export_ausstehend: mindestens einer der drei CSV-Exporte (die Auto bewusst nicht selbst
+        auslöst) ist noch nicht erstellt - nur relevant, wenn abgeschlossen=True."""
         text = "\n".join(protokoll) + "\n\n"
-        if abgeschlossen:
-            text += "✅ Automatischer Ablauf komplett durchgelaufen - alle Pflichtschritte erledigt.\n"
-        else:
+        if not abgeschlossen:
             text += "⏸️ Automatischer Ablauf angehalten - siehe ⛔-Zeile oben für den nötigen manuellen Schritt.\n"
+        elif export_ausstehend:
+            text += ("✅ Vorbereitung abgeschlossen - bitte jetzt die gewünschten CSV-Exporte "
+                      "manuell über die jeweiligen Buttons erstellen (siehe ➡️-Zeilen oben).\n")
+        else:
+            text += "✅ Automatischer Ablauf komplett durchgelaufen - alle Pflichtschritte erledigt.\n"
 
         besonderheiten = self._besonderheiten_dauerhafte_einstellungen()
         if besonderheiten:
@@ -351,6 +363,12 @@ class Generator():
         # zuletzt eingelesenen CSV-Datei, damit man beim nächsten Mal nicht erneut die Datei
         # auswählen und die Spalten zuordnen muss (siehe _frage_json_oder_datei()).
         self.referenz_id_mapping = {}
+        # Liste von Zeilen (je ein {Spaltenname: Wert}-Dict, Spalten wie in writeSuSCSV() -
+        # ReferenzId/Vorname/Nachname/Klasse/Arbeitsgruppen/Cloud#Kurs/Cloud#Gruppe) aus einer
+        # manuell eingelesenen CSV (siehe edit_zusaetzliche_schueler(), "Dauerhafte
+        # Einstellungen" > "Zusätzliche Schüler"). Wird beim Erzeugen von Student.csv automatisch
+        # angehängt, z.B. für Schüler, die nicht in Schild3 geführt werden.
+        self.zusaetzliche_schueler_csv_zeilen = []
         sv.setConfig(self.base_url, (self.username, self.password))
         if os.path.exists("server.pem"):
             sv.verify="server.pem"
@@ -977,14 +995,16 @@ class Generator():
         if not all("teamBez" in lerngruppe for lerngruppe in getattr(self,"lerngruppen",{})):
             return "Nicht alle Lerngruppen haben eine Teams-Bezeichnung (key: teamBez)\n"
         self.normalisiere_jahrgangsteams()
+        anzahl_zusatz = 0
         with open(filename, mode="w", newline="", encoding="utf-8") as csvfile:
             writer = csv.writer(csvfile, delimiter=";")
             # Neues MNSpro-Cloud-Format (siehe README.md, Abschnitt "CSV-Import-Format für MNSpro
             # Cloud"): statt einer Gruppen-Spalte je eine Spalte pro Zielkategorie (self.ziel_spalten)
             if (statusList != [2]):
-                writer.writerow(["ReferenzId", "Vorname", "Nachname", "Klassen"] + list(self.ziel_spalten.values()))  # Kopfzeile
+                kopfzeile = ["ReferenzId", "Vorname", "Nachname", "Klassen"] + list(self.ziel_spalten.values())
             else:
-                writer.writerow(["ReferenzId", "Vorname", "Nachname", "Klasse"] + list(self.ziel_spalten.values()))  # Kopfzeile
+                kopfzeile = ["ReferenzId", "Vorname", "Nachname", "Klasse"] + list(self.ziel_spalten.values())
+            writer.writerow(kopfzeile)
 
             count = 0
             lookup_lg = self.lookupDict.get("lerngruppen",{})
@@ -1043,6 +1063,18 @@ class Generator():
                     nachname = replace_chars(nachname, my_char_map)
                     vorname = replace_chars(vorname, my_char_map)
                 writer.writerow([referenzId, vorname, nachname, klasse] + zielspalten_werte)
+
+            # Zusätzliche, manuell gepflegte Schüler anhängen (siehe edit_zusaetzliche_schueler,
+            # "Dauerhafte Einstellungen") - bewusst NUR bei der normalen aktiven Schüler-CSV
+            # (Student.csv), nicht bei StudentExternal.csv oder den Sonder-Exporten von
+            # "Schüler aufräumen" (Student_clean.csv/StudentExternal_clean.csv).
+            if filename == "Student.csv" and self.zusaetzliche_schueler_csv_zeilen:
+                for zeile in self.zusaetzliche_schueler_csv_zeilen:
+                    writer.writerow([zeile.get(spalte, "") for spalte in kopfzeile])
+                    anzahl_zusatz += 1
+                count += anzahl_zusatz
+        if anzahl_zusatz:
+            ergText += f"➕ {anzahl_zusatz} zusätzliche Schüler aus gespeicherter CSV angehängt\n"
         if jahrgangs_override is not None:
             ergText += "ℹ️ Schüler aufräumen: Spaltenwerte wurden wörtlich je Jahrgang eingetragen, keine Lerngruppen-Berechnung:\n"
             for jahrgang in sorted(jahrgangs_override):
@@ -1065,6 +1097,92 @@ class Generator():
         ergText+=(f"✅ CSV-Datei '{filename}' wurde mit {count} Einträgen erstellt.\n")
         self.exportedFlags["sus_extern_csv" if filename == "StudentExternal.csv" else "schueler_csv"] = True
         return ergText
+
+    def edit_zusaetzliche_schueler(self, master) -> str:
+        """Dialog zur Pflege von self.zusaetzliche_schueler_csv_zeilen ("Dauerhafte
+        Einstellungen" > "Zusätzliche Schüler"): liest eine CSV-Datei im selben Format wie die
+        Ausgabe von writeSuSCSV() ein (Spalten ReferenzId;Vorname;Nachname;Klasse;<Zielspalten>,
+        Trennzeichen ";") und merkt sich deren Zeilen - werden beim nächsten Erzeugen von
+        "Student.csv" automatisch angehängt (mit Anzahl im Ergebnistext), z.B. für Schüler, die
+        nicht in Schild3 geführt werden, aber trotzdem ein MNSpro-Konto brauchen.
+        Ein neu eingelesener Datei-Inhalt ERSETZT die bisher gespeicherten Zeilen (kein
+        Anhängen), um Dubletten durch mehrfaches Einlesen zu vermeiden. Änderungen wirken sofort
+        auf self.zusaetzliche_schueler_csv_zeilen (landet damit auch in status.json, da Teil von
+        self.__dict__). Gibt eine kurze Statuszeile für das Report-Textfeld zurück, sonst ""."""
+        if not hasattr(self, "zusaetzliche_schueler_csv_zeilen") or self.zusaetzliche_schueler_csv_zeilen is None:
+            self.zusaetzliche_schueler_csv_zeilen = []
+
+        win = tk.Toplevel(master)
+        win.title("Zusätzliche Schüler (werden an Student.csv angehängt)")
+        win.transient(master)
+        win.grab_set()
+        win.columnconfigure(0, weight=1)
+
+        ttk.Label(win, wraplength=420, justify="left",
+                  text="CSV-Datei im selben Format wie die Ausgabe von 'schueler_csv' (Spalten "
+                       "ReferenzId;Vorname;Nachname;Klasse;Arbeitsgruppen;Cloud#Kurs;Cloud#Gruppe, "
+                       "Trennzeichen ';'). Die Zeilen werden gespeichert und beim nächsten Erzeugen "
+                       "von 'Student.csv' automatisch angehängt.") \
+            .grid(row=0, column=0, sticky="w", padx=8, pady=(10, 8))
+
+        lbl_status = ttk.Label(win, foreground="#555555")
+        lbl_status.grid(row=1, column=0, sticky="w", padx=8, pady=(0, 8))
+
+        ergebnis = {"text": ""}
+
+        def status_aktualisieren():
+            anzahl = len(self.zusaetzliche_schueler_csv_zeilen)
+            lbl_status.config(text=f"Aktuell gespeichert: {anzahl} zusätzliche Schüler" if anzahl
+                               else "Aktuell keine zusätzlichen Schüler gespeichert")
+
+        def datei_waehlen():
+            filepath = filedialog.askopenfilename(
+                parent=win, title="CSV-Datei mit zusätzlichen Schülern wählen",
+                filetypes=[("CSV-Dateien", "*.csv"), ("Alle Dateien", "*.*")]
+            )
+            if not filepath:
+                return
+            try:
+                with open(filepath, newline="", encoding="utf-8") as f:
+                    reader = csv.DictReader(f, delimiter=";", quotechar='"')
+                    zeilen = [dict(row) for row in reader]
+                    spalten = reader.fieldnames or []
+            except Exception as ex:
+                messagebox.showerror("Fehler beim Einlesen", str(ex), parent=win)
+                return
+            if not zeilen or "ReferenzId" not in spalten:
+                messagebox.showwarning(
+                    "Hinweis",
+                    "Datei enthält keine Daten oder keine Spalte 'ReferenzId' - bitte Format prüfen "
+                    "(Kopfzeile wie bei der Ausgabe von 'schueler_csv' erwartet).",
+                    parent=win)
+                return
+            self.zusaetzliche_schueler_csv_zeilen = zeilen
+            ergebnis["text"] = f"➕ {len(zeilen)} zusätzliche Schüler aus '{os.path.basename(filepath)}' übernommen\n"
+            status_aktualisieren()
+
+        def loeschen():
+            if not self.zusaetzliche_schueler_csv_zeilen:
+                return
+            if messagebox.askyesno(
+                    "Löschen",
+                    f"Alle {len(self.zusaetzliche_schueler_csv_zeilen)} gespeicherten zusätzlichen "
+                    f"Schüler wirklich löschen?", parent=win):
+                self.zusaetzliche_schueler_csv_zeilen = []
+                ergebnis["text"] = "🗑️ Zusätzliche Schüler gelöscht\n"
+                status_aktualisieren()
+
+        btns = ttk.Frame(win)
+        btns.grid(row=2, column=0, sticky="e", padx=8, pady=8)
+        ttk.Button(btns, text="CSV-Datei wählen...", command=datei_waehlen).pack(side="left", padx=4)
+        ttk.Button(btns, text="Löschen", command=loeschen).pack(side="left", padx=4)
+        ttk.Button(btns, text="Schließen", command=win.destroy).pack(side="left", padx=4)
+
+        status_aktualisieren()
+        win.protocol("WM_DELETE_WINDOW", win.destroy)
+        win.wait_window()
+
+        return ergebnis["text"]
 
     def edit_schueler_aufraeumen(self, master) -> str:
         """Dialog zur Pflege von self.schueler_aufraeumen_werte UND (über den eigenen Button
