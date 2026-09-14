@@ -1,6 +1,7 @@
 import json
 import random
 import os
+import re
 import tkinter as tk
 import generator as logic
 import webbrowser
@@ -36,7 +37,7 @@ class ReportApp(tk.Tk):
         # ausgelagert. Werkzeuge = jederzeit nutzbare Hilfsfunktionen ohne feste Reihenfolge;
         # Dauerhafte Einstellungen = Konfiguration, die man selten ändert.
         werkzeuge_menu_texts = [
-            "Statistik anzeigen", "generateLookupDicts", "ClearScreen", "show_objekt_by_id",
+            "Statistik anzeigen", "generateLookupDicts", "ClearScreen", "Suche",
             "LeereLerngruppenLöschen", "ErgänzeSchülerAusDB", "ListeTeamBez",
             "Übersicht Lernplattformen", "IDs prüfen", "ErgänzeLehrerAusDB",
             "ZuordnungUebersicht", "Schüler aufräumen",
@@ -63,7 +64,7 @@ class ReportApp(tk.Tk):
             "schueler_csv": "Erstellt die schueler.csv-Datei zum import in MNSpro",
             "schueler_extern_csv": "Erstellt die schueler.csv-Datei mit\nexternen Schülern (Status 6)\nzum import in MNSpro",
             "lehrer_csv": "Erstellt die lehrer.csv-Datei zum import in MNSpro",
-            "show_objekt_by_id": "Dialog zum Suchen und Anzeigen eines Objekts anhand von Typ und ID\nz.B. Schüler mit id=1234",
+            "Suche": "Sucht Objekte eines Typs entweder nach exakter ID (wie bisher)\noder per Regex über alle Felder hinweg (Häkchen 'Regex' setzen),\nz.B. Schüler mit dem Namen 'Florian'. Bei mehreren Treffern mit\n◀/▶ durchblättern.",
             "Serverzertifikat laden": "Lädt ein selbstsigniertes\nZertifikat herunter und\nspeichert es in ./server.pem",
             "ErgänzeLehrerAusDB": "Veraltet - holt ggf.\nfehlende Lehrer über\neinen alternativen\nAPI-Endpunkt",
             "ErgänzeSchülerAusDB": "holt ggf. fehlende Schüler über GET /schueler/abschnitt/{abschnittId}",
@@ -213,8 +214,8 @@ class ReportApp(tk.Tk):
                     self.report_text.see(tk.END)
             case "Statistik anzeigen":
                 self.show_statistik()
-            case "show_objekt_by_id":
-                self.show_objekt_by_id()
+            case "Suche":
+                self.oeffne_suche()
             case "generateLookupDicts":
                 self.generator.generateLookups()
                 ergtext = "Erstellte Lookup-Dictionaries:\n"
@@ -528,38 +529,49 @@ class ReportApp(tk.Tk):
         self.report_text.delete(1.0, tk.END)
         self.report_text.insert(tk.END, report)
 
-    def show_objekt_by_id(self):
-        """Dialog zum Suchen und Anzeigen eines Objekts anhand von Typ und ID."""
-        
+    def oeffne_suche(self):
+        """Dialog zum Suchen von Objekten: entweder wie bisher nach exakter ID, oder (Häkchen
+        "Regex") per Regex über den kompletten (als JSON serialisierten) Inhalt eines Objekts -
+        z.B. um Schüler mit dem Namen "Florian" zu finden, ohne das genaue Feld zu kennen. Bei
+        mehreren Treffern zeigt das Textfeld immer nur EIN Objekt auf einmal, mit ◀/▶ zum
+        Durchblättern - statt wie früher alle Treffer auf einmal in den Text zu dumpen."""
+
         typen = ["jahrgaenge", "klassen", "lehrer", "faecher", "lerngruppen", "schueler"]
-        
+
         # --- Toplevel-Dialog erstellen ---
         win = tk.Toplevel()
-        win.title("Objekt nach ID suchen")
+        win.title("Suche")
         win.resizable(True, True)
         win.columnconfigure(0, weight=1)
         win.columnconfigure(1, weight=1)
-        win.rowconfigure(3, weight=1)  # Zeile mit dem Textfeld wächst
+        win.rowconfigure(4, weight=1)  # Zeile mit dem Textfeld wächst
 
         # Typ-Auswahl
         tk.Label(win, text="Typ:").grid(row=0, column=0, sticky="w", padx=8, pady=6)
         cb_typ = ttk.Combobox(win, values=typen, state="readonly", width=20)
         cb_typ.current(0)
-        cb_typ.grid(row=0, column=1, padx=8, pady=6)
+        cb_typ.grid(row=0, column=1, padx=8, pady=6, sticky="w")
 
-        # ID-Eingabe
-        tk.Label(win, text="ID:").grid(row=1, column=0, sticky="w", padx=8, pady=6)
-        entry_id = ttk.Entry(win, width=22)
-        entry_id.grid(row=1, column=1, padx=8, pady=6)
-        entry_id.focus()
+        # Suchmuster-Eingabe
+        tk.Label(win, text="Suchmuster:").grid(row=1, column=0, sticky="w", padx=8, pady=6)
+        entry_muster = ttk.Entry(win, width=26)
+        entry_muster.grid(row=1, column=1, padx=8, pady=6, sticky="ew")
+        entry_muster.focus()
+
+        regex_var = tk.BooleanVar(value=False)
+        ck_regex = ttk.Checkbutton(win, text="Regex (alle Felder durchsuchen, sonst exakte ID)", variable=regex_var)
+        ck_regex.grid(row=2, column=0, columnspan=2, sticky="w", padx=8)
+
+        lbl_status = ttk.Label(win, foreground="#555555")
+        lbl_status.grid(row=3, column=0, columnspan=2, sticky="w", padx=8, pady=(4, 0))
 
         # Ergebnis-Textfeld
         result_frame = tk.Frame(win)
-        result_frame.grid(row=3, column=0, columnspan=2, padx=8, pady=6, sticky="nsew")
-        
+        result_frame.grid(row=4, column=0, columnspan=2, padx=8, pady=6, sticky="nsew")
+
         scrollbar = tk.Scrollbar(result_frame)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        
+
         result_text = tk.Text(
             result_frame,
             width=60,
@@ -570,46 +582,77 @@ class ReportApp(tk.Tk):
         result_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.config(command=result_text.yview)
 
+        # Merkt sich die aktuelle Trefferliste + Position darin, für ◀/▶ (siehe zeige_treffer)
+        zustand = {"treffer": [], "index": 0}
+
+        def zeige_treffer():
+            result_text.delete(1.0, tk.END)
+            treffer = zustand["treffer"]
+            if not treffer:
+                lbl_status.config(text="Keine Treffer")
+                return
+            i = zustand["index"]
+            lbl_status.config(text=f"Treffer {i + 1} von {len(treffer)}")
+            result_text.insert(tk.END, json.dumps(treffer[i], indent=2, ensure_ascii=False))
+
         # --- Suchfunktion ---
         def suchen():
             typ = cb_typ.get()
-            id_eingabe = entry_id.get().strip()
+            muster = entry_muster.get().strip()
+            zustand["treffer"] = []
+            zustand["index"] = 0
 
-            result_text.delete(1.0, tk.END)
-
-            if not id_eingabe:
-                result_text.insert(tk.END, "Bitte eine ID eingeben.")
+            if not muster:
+                result_text.delete(1.0, tk.END)
+                lbl_status.config(text="Bitte ein Suchmuster eingeben.")
                 return
-
-            # ID als int oder string versuchen
-            try:
-                id_val = int(id_eingabe)
-            except ValueError:
-                id_val = id_eingabe
 
             liste = getattr(self.generator, typ, [])
 
-            # Suche nach "id"-Feld im Objekt – flexibel: int oder str vergleichen
-            treffer = [
-                obj for obj in liste
-                if obj.get("id") == id_val or str(obj.get("id", "")) == str(id_eingabe)
-            ]
-
-            if not treffer:
-                result_text.insert(tk.END, f'Kein Eintrag in "{typ}" mit id={id_eingabe} gefunden.')
+            if regex_var.get():
+                # Regex gegen die komplette JSON-Serialisierung jedes Objekts - findet Treffer
+                # in JEDEM Feld (auch verschachtelten Listen/Dicts), ohne das Feld kennen zu müssen.
+                try:
+                    pattern = re.compile(muster, re.IGNORECASE)
+                except re.error as ex:
+                    result_text.delete(1.0, tk.END)
+                    lbl_status.config(text=f"⚠️ Ungültiges Regex-Muster: {ex}")
+                    return
+                treffer = [obj for obj in liste if pattern.search(json.dumps(obj, ensure_ascii=False))]
             else:
-                for obj in treffer:
-                    result_text.insert(tk.END, json.dumps(obj, indent=2, ensure_ascii=False))
-                    result_text.insert(tk.END, "\n")
+                # Wie bisher: exakte ID, flexibel int oder str vergleichen
+                try:
+                    id_val = int(muster)
+                except ValueError:
+                    id_val = muster
+                treffer = [
+                    obj for obj in liste
+                    if obj.get("id") == id_val or str(obj.get("id", "")) == muster
+                ]
+
+            zustand["treffer"] = treffer
+            zeige_treffer()
+
+        def naechstes():
+            if zustand["treffer"] and zustand["index"] < len(zustand["treffer"]) - 1:
+                zustand["index"] += 1
+                zeige_treffer()
+
+        def vorheriges():
+            if zustand["treffer"] and zustand["index"] > 0:
+                zustand["index"] -= 1
+                zeige_treffer()
 
         # Suche auch per Enter auslösen
-        entry_id.bind("<Return>", lambda e: suchen())
+        entry_muster.bind("<Return>", lambda e: suchen())
 
         # Buttons
         btn_frame = tk.Frame(win)
-        btn_frame.grid(row=2, column=0, columnspan=2, pady=4)
-        ttk.Button(btn_frame, text="Suchen", command=suchen).pack(side=tk.LEFT, padx=6)
-        ttk.Button(btn_frame, text="Schließen", command=win.destroy).pack(side=tk.LEFT, padx=6)
+        btn_frame.grid(row=5, column=0, columnspan=2, pady=4)
+        ttk.Button(btn_frame, text="Suchen", command=suchen).pack(side=tk.LEFT, padx=4)
+        ttk.Button(btn_frame, text="◀ Vorheriges", command=vorheriges).pack(side=tk.LEFT, padx=4)
+        ttk.Button(btn_frame, text="Nächstes ▶", command=naechstes).pack(side=tk.LEFT, padx=4)
+        ttk.Button(btn_frame, text="Schließen", command=win.destroy).pack(side=tk.LEFT, padx=4)
 
         win.grab_set()
         win.wait_window()
