@@ -14,6 +14,8 @@ Einfach **SchildMNSDataMatcher_GUI.py** bzw die Exe starten.
 
 Eine ``status.json`` - Datei wird automatisch angelegt. Wenn mal etwas nicht wie erwartet läuft, vielleicht auch mal in die Console schauen.
 
+**Das Passwort wird aus Sicherheitsgründen NIE mit in ``status.json`` gespeichert.** Nach *Load state* öffnet sich deshalb automatisch der Verbindungseinstellungen-Dialog mit dem Cursor im leeren Passwortfeld - Enter im Feld übernimmt die Eingabe und schließt den Dialog direkt.
+
 Für einen Test ohne eigenen SVWS-Server können folgende Daten unter dem Button Verbindungseinstellung verwendet werden (Standard-Programmvorgaben)
 
 ````bash
@@ -27,6 +29,23 @@ Für einen Test ohne eigenen SVWS-Server können folgende Daten unter dem Button
 
 ## Bedienung
 
+### Aufbau des Hauptfensters: Button-Grid, Werkzeuge, Dauerhafte Einstellungen
+
+Im Button-Grid steht nur noch der eigentliche Ablauf-Pfad (Verbindung → Daten holen → Zuordnen → Export, siehe [Button-Führung](#button-führung-farben)). Alles andere ist in zwei Dropdown-Buttons direkt unter der Menüleiste ausgelagert:
+
+- **Werkzeuge**: jederzeit nutzbare Hilfs- und Kontrollfunktionen ohne feste Reihenfolge - Statistik anzeigen, generateLookupDicts, ClearScreen, Suche, LeereLerngruppenLöschen, ErgänzeSchülerAusDB, ListeTeamBez, Übersicht Lernplattformen, IDs prüfen, ErgänzeLehrerAusDB, ZuordnungUebersicht, Schüler aufräumen.
+- **Dauerhafte Einstellungen**: Konfiguration, die man selten ändert - Serverzertifikat laden, TeamBezRewriteBearbeiten, Jahrgangsteams, Teams nicht erstellen, BezeichnungsMusterBearbeiten, Zusätzliche Schüler.
+
+Die wenigen Einträge davon, die Teil der Pflicht-/Optional-Kette sind (z.B. generateLookupDicts, Jahrgangsteams), werden dort genauso farbig markiert wie die Grid-Buttons.
+
+### Automatischer Ablauf: der Auto-Button
+
+Der Button **Auto** arbeitet den grünen Pflichtpfad selbstständig ab, ein Schritt nach dem anderen, und hängt seinen Bericht an das Textfeld an. Er holt dabei "Lerngruppen holen" (und damit implizit die Abschnitts-ID) immer frisch von der Datenbank, statt sich auf eventuell veraltete, aus `status.json` geladene Daten zu verlassen.
+
+Er stoppt gezielt (⛔) an Stellen, die eine manuelle Entscheidung brauchen, z.B. eine unvollständige Kursart-Zuordnung oder eine noch nicht in `status.json` gespeicherte Referenz-ID-Zuordnung. Die drei CSV-Exporte (`schueler_csv`/`sus_extern_csv`/`lehrer_csv`) erstellt Auto bewusst **nicht** selbst - das bleibt ein manueller, letzter Schritt über die jeweiligen Buttons (z.B. um vorher nochmal ZuordnungUebersicht zu prüfen); Auto meldet stattdessen, welche davon noch erstellt werden müssen.
+
+Am Ende zeigt Auto immer eine deutlich hervorgehobene "BESONDERHEITEN"-Übersicht über aktuell wirksame Dauerhafte Einstellungen (TeamBez-Rewrite, Jahrgangsteams, Teams nicht erstellen, Bezeichnungs-Muster, eigenes Server-Zertifikat), damit deren Auswirkung auf den Export nicht übersehen wird.
+
 ### Konfiguration und Daten werden gemeinsam gesichert
 
 Die Daten werden in der Datei status.json gespeichert. In der Datei finden sich die Daten zu Schüler, Kursen, der Datenbankverbindung und noch mehr. Für die schnellere Bearbeitung der Daten werden lookup-Dictionaries erstellt, die zu den jeweiligen IDs von Schülern, Lehreren oder Lerngruppen direkt auf die Objekte verweisen. Diese werden nicht gespeichert und müssen also ggf. nach dem Laden über den entsprechenden Button wieder erstellt werden.
@@ -35,6 +54,8 @@ Die Daten werden in der Datei status.json gespeichert. In der Datei finden sich 
 
 Dazu den Button Verbindungseinstellungen betätigen und insbesondere die Datenbankverbindungseinstellungen korrekt setzen. Ob dies erfolgreich war kann über den Button *Abschnitts-ID holen* geprüft werden. Dieser holt aus der Datenbank die ID des in der Verbindung eingestellten Lernabschnitts (z.B. 2025 Abschnitt 1). Rückmeldungen werden in der Regel in dem Textfeld des GUIs angezeigt.
 Falls es Schwierigkeiten mit der Authentifizierung des Zertifikats gibt, kann im Datei-Menü unter Einstellungen die Verifizierung des Zertifikates abgeschaltet werden oder mittels server.pem wird das Serverzertifkat (sofern nicht vorhanden) in die Datei server.pem heruntergeladen. Wenn es ein self-signed Zertifikat ist, funktioniert die Verifizierung ab dann.
+
+Stimmt ein bereits gespeichertes `server.pem` nicht mehr mit dem aktuellen Serverzertifikat überein (z.B. weil es zwischenzeitlich erneuert wurde), zeigt das Textfeld dazu eine klare Fehlermeldung mit dem Hinweis, **"Serverzertifikat laden"** (zu finden unter dem Dropdown "Dauerhafte Einstellungen") erneut auszuführen - das überschreibt die vorhandene Datei automatisch mit dem aktuellen Zertifikat.
 
 
 
@@ -50,7 +71,7 @@ Mit Statistik anzeigen erhält man einen Überblick über das was so an Daten ge
 
 ### LookUp-Dicts generieren
 
-Falls mal eine Funktion nicht richtig ausgeführt wird, könnte es daran liegen, dass die Lookup-Dictionaries noch nicht erstellt wurden, das kann über diesen Button nachgeholt bzw. nach Laden erneut durchgeführt werden.
+Falls mal eine Funktion nicht richtig ausgeführt wird, könnte es daran liegen, dass die Lookup-Dictionaries noch nicht erstellt wurden, das kann über den Menüpunkt **generateLookupDicts** (Dropdown "Werkzeuge") nachgeholt bzw. nach Laden erneut durchgeführt werden.
 
 ### Den Lerngruppen die Schüler-IDs zuweisen
 
@@ -63,6 +84,10 @@ Mit diesem Button wird in jeder Lerngruppe das Attribut **teamBez** erstellt. Da
 Bei der Erstellung der Teamnamen wird bei Klassenteams und Jahrgangsteams geprüft ob alle Schüler aus einer Klasse bzw. einem Jahrgang sind. Das ist hilfreich, da fehlerhafte Kurszuordnungen in Schild so entdeckt werden können.
 
 Hinweis: Ob der Vorgang erfolgreich oder sinnvoll war, kann dann auch z.B. über Statistik erstellen geprüft werden oder man speichert und schaut sich status.json an.
+
+#### TeamBez-Rewrite
+
+Direkt im Anschluss an "Team - Bezeichnungen erstellen" werden die unter **TeamBezRewriteBearbeiten** (Dropdown "Dauerhafte Einstellungen") gepflegten Regeln angewandt: eine geordnete Liste sed-artiger Ersetzungs-Regeln (Regex-Suchmuster + Ersetzung) auf die fertige `teamBez`, z.B. um `Q1 - ...` in `Abi28 - ...` umzubenennen. Anders als bei den Bezeichnungs-Mustern (siehe unten) gewinnt hier nicht nur die erste passende Regel - alle Regeln werden der Reihe nach angewandt, jede auf das Ergebnis der vorherigen. Der Ergebnistext von "Team - Bezeichnungen erstellen" zeigt für jede Regel, wie oft sie gegriffen hat.
 
 ### Kursart-Zuordnung (Arbeitsgruppe / Kurs / Gruppe)
 
@@ -82,13 +107,15 @@ Den Schülern (und über den anderen Button den Lehreren) sollten für die Verwa
 
 Bei den Lehrern gibt es keine eindeutige ID, daher wird hier das kuerzel als Zuordnung verwendet. Aus Schild3 muss also eine csv-Datei mit Kürzel und eindeutiger ID (GUID) exportiert werden.
 
+Die eingelesene Zuordnung (Schüler wie Lehrer) wird dabei in `status.json` gemerkt. Ist für den jeweiligen Typ schon eine gespeicherte Zuordnung vorhanden, fragt das Programm vor dem Dateiauswahl-Dialog nach: **"Daten aus JSON verwenden"**, **"Datei öffnen"** oder **"Abbrechen"** - man muss die Zuordnungsdatei also nicht bei jedem Programmstart erneut einlesen.
+
 ### SchildID als Referenz ID
 
 Als Alternative kann auch die Schild-ID als Referenz-ID genutzt werden. Es sollte jedoch jeder Schüler eine ReferenzID haben, bevor die Export-Datei generiert wird.
 
 ### Jahrgangsteams und LehrerTeams
 
-Manchmal möchte man den Schülern eines Jahrgangs noch Teams zuweisen, z.B. der EF ein Team Abi28 oder dem Jahrgang 9 und 10 ein BO-Team. Dies kann in diesem Dialog erfolgen und Schüler aus dem Jahrganag erhalten dann beim Export dieses Team bzw. auch Teams.
+(Menüpunkt **Jahrgangsteams**, Dropdown "Dauerhafte Einstellungen") Manchmal möchte man den Schülern eines Jahrgangs noch Teams zuweisen, z.B. der EF ein Team Abi28 oder dem Jahrgang 9 und 10 ein BO-Team. Dies kann in diesem Dialog erfolgen und Schüler aus dem Jahrganag erhalten dann beim Export dieses Team bzw. auch Teams.
 
 Seit der Umstellung auf das neue MNSpro-Cloud-Format gibt es dafür drei getrennte Eingabefelder – eines je Zielkategorie (Arbeitsgruppen / Cloud#Kurs / Cloud#Gruppe, siehe [CSV-Import-Format für MNSpro Cloud](#csv-import-format-für-mnspro-cloud)). Ein alter Jahrgangsteams-Eintrag aus einer früheren `status.json` wird beim Laden automatisch migriert (Hinweis erscheint im Textfeld).
 
@@ -96,7 +123,7 @@ Besonders ist hier das Team für den Jahrgang **Lehrer**. Dieser Jahrgang wird a
 
 ### Lehrer ergänzen
 
-Aktuell (22.08.2025) sind in dem Lerngruppenexport nicht alle Lehrer enthalten - ich habe diese über einen Anknüpfungspunkt der API ergänzt. Lehrer die nicht in dem Lerngruppenexport vorhanden sind aber in lerngruppen referenziert werden, werden dann bei lehrern ergänzt. Dann muss natürlich wieder die Referenz-ID zugewiesen werden usw.
+(Menüpunkt **ErgänzeLehrerAusDB**, Dropdown "Werkzeuge") Aktuell (22.08.2025) sind in dem Lerngruppenexport nicht alle Lehrer enthalten - ich habe diese über einen Anknüpfungspunkt der API ergänzt. Lehrer die nicht in dem Lerngruppenexport vorhanden sind aber in lerngruppen referenziert werden, werden dann bei lehrern ergänzt. Dann muss natürlich wieder die Referenz-ID zugewiesen werden usw.
 
 ### Besitzer-Markierung (^) für Kursleiter
 
@@ -104,15 +131,23 @@ Beim Export von `lehrer_csv` werden Lehrkräfte automatisch mit `^` als Besitzer
 
 ### Kontrollfunktionen
 
+Alle folgenden Punkte liegen im Dropdown **"Werkzeuge"**:
+
 - **Statistik anzeigen** gibt einen allgemeinen Überblick über die geladenen Daten.
 - **IDs prüfen** prüft für jede Lerngruppe, ob alle in `idsLehrer`/`idsSchueler` referenzierten IDs zu einem existierenden Lehrer bzw. Schüler gehören - z.B. um Karteileichen durch gelöschte/verschobene Personen in der Schild-DB zu finden.
 - **ListeTeamBez** listet alle vergebenen Team-Bezeichnungen alphabetisch auf, zum Prüfen auf Sinnhaftigkeit.
 - **ZuordnungUebersicht** ist der Kontrollschritt vor dem eigentlichen Export: zeigt je Zielkategorie (Arbeitsgruppe/Kurs/Gruppe) die betroffenen Lerngruppen, warnt vor nicht klassifizierten Lerngruppen und vor Team-Bezeichnungen, die in mehreren Zielkategorien gleichzeitig auftauchen.
 - **LeereLerngruppenLöschen** entfernt Lerngruppen ohne Schüler (z.B. in der Planungsphase eines Schuljahres hilfreich) und bereinigt dabei auch die Verweise bei Lehrern/Schülern, im Lookup-Dict und bei Kursart-Overrides. Voraussetzung: `idsSchuelerZuLerngruppen` muss vorher gelaufen sein; fragt vor dem Löschen zur Sicherheit nach.
+- **Suche** sucht Objekte eines Typs (Schüler, Lehrer, Lerngruppen, ...) entweder nach exakter ID oder - Häkchen "Regex" - per Regex über den kompletten Inhalt jedes Objekts (findet Treffer in jedem Feld, ohne es kennen zu müssen, z.B. Schüler mit dem Namen "Florian"). Bei mehreren Treffern lässt sich mit "◀ Vorheriges"/"Nächstes ▶" durchblättern.
+- **Schüler aufräumen** erstellt eine von den Lerngruppen komplett unabhängige Sonder-Schüler-CSV: pro Jahrgang wird ein fester Wert je Zielspalte hinterlegt (leer = Spalte löschen, `*` = MNSpro-Cloud-Konvention "bestehende Zuordnung beim Import beibehalten", sonst wörtlicher Text), z.B. um alle Cloud-Kurs-Zuordnungen eines Jahrgangs auf einen Schlag zurückzusetzen. Schreibt nach `Student_clean.csv`/`StudentExternal_clean.csv`, um den normalen Export nicht zu überschreiben.
+
+### Zusätzliche Schüler
+
+(Menüpunkt **Zusätzliche Schüler**, Dropdown "Dauerhafte Einstellungen") Liest eine CSV-Datei im selben Format wie die Ausgabe von `schueler_csv` ein (Spalten `ReferenzId;Vorname;Nachname;Klasse;Arbeitsgruppen;Cloud#Kurs;Cloud#Gruppe`, Trennzeichen `;`) und merkt sich deren Zeilen in `status.json`. Sie werden beim nächsten Erzeugen der echten `Student.csv` automatisch angehängt - z.B. für Schüler, die nicht in Schild3 geführt werden, aber trotzdem ein MNSpro-Konto brauchen. Die Anzahl wird deutlich im Ergebnistext angezeigt (`➕ N zusätzliche Schüler ... angehängt`); ein neu eingelesener Datei-Inhalt ersetzt die bisher gespeicherten Zeilen.
 
 ### Export-Dateien erstellen
 
-Der eigentliche Export geschieht über die drei Buttons schueler_csv, sus_extern_csv und lehrer_csv - wenn alles gut läuft werden die entsprechenden csv-Dateien erstellt. Ein Blick in **ZuordnungUebersicht** vorher lohnt sich, um Überraschungen zu vermeiden.
+Der eigentliche Export geschieht über die drei Buttons schueler_csv, sus_extern_csv und lehrer_csv - wenn alles gut läuft werden die entsprechenden csv-Dateien erstellt. Ein Blick in **ZuordnungUebersicht** vorher lohnt sich, um Überraschungen zu vermeiden. Der **Auto**-Button (siehe oben) bereitet alles bis hierhin automatisch vor, erstellt die drei Export-Dateien aber bewusst nicht selbst.
 
 ## CSV-Import-Format für MNSpro Cloud
 
@@ -173,9 +208,11 @@ Damit man auch nach einer Pause weiß, wo man stehen geblieben ist, färbt das P
 - **Grün**: der nächste noch fehlende Pflichtschritt. Gibt es für einen Schritt zwei gleichwertige Buttons (z.B. bei den Referenz-IDs "aus File" oder "aus SuS-Ids"/"aus kuerzel"), werden beide grün markiert - es reicht, einen davon zu benutzen.
 - **Graublau**: bereits erledigte Schritte.
 - **Gelb**: Schritte, die gerade sinnvoll wären, aber nicht zwingend nötig sind (z.B. Ergänze Schüler/Lehrer aus DB, Jahrgangsteams, Teams nicht erstellen).
-- **Unverändert**: reine Hilfs- und Kontrollbuttons (Statistik anzeigen, ZuordnungUebersicht, BezeichnungsMusterBearbeiten, LeereLerngruppenLöschen, Serverzertifikat laden, ClearScreen, ...) sowie die Verbindungseinstellung sind nicht Teil der Führung und bleiben immer normal nutzbar.
+- **Unverändert**: reine Hilfs- und Kontrollfunktionen (die meisten Einträge unter "Werkzeuge"/"Dauerhafte Einstellungen", der Auto-Button, ClearScreen, ...) sowie die Verbindungseinstellung sind nicht Teil der Führung und bleiben immer normal nutzbar.
 
-Der Pflichtpfad umfasst der Reihe nach: Abschnitts-ID holen → Lerngruppen holen → generateLookupDicts → idsSchuelerZuLerngruppen → TeamBezErstellen → KursartZuordnung → Referenz-IDs für Schüler → idsLerngruppenZuLehrern → idsKlassenleitungenZuLehrern → Referenz-IDs für Lehrer → schueler_csv → sus_extern_csv → lehrer_csv.
+Die wenigen in die beiden Dropdowns ausgelagerten Einträge, die Teil der Pflicht-/Optional-Kette sind (generateLookupDicts, ErgänzeSchülerAusDB, ErgänzeLehrerAusDB, Jahrgangsteams, Teams nicht erstellen), werden genauso eingefärbt wie die Grid-Buttons.
+
+Der Pflichtpfad umfasst der Reihe nach: Abschnitts-ID holen → Lerngruppen holen → generateLookupDicts → idsSchuelerZuLerngruppen → TeamBezErstellen → KursartZuordnung → Referenz-IDs für Schüler → idsLerngruppenZuLehrern → idsKlassenleitungenZuLehrern → Referenz-IDs für Lehrer → schueler_csv → sus_extern_csv → lehrer_csv. Der **Auto**-Button arbeitet davon automatisch alles bis auf die drei CSV-Exporte ab (siehe oben).
 
 Die genauen Zustände sind in `generator.py` als `WorkflowStep` (Pflichtschritte) und `OptionalStep` (situative Schritte) benannt.
 
