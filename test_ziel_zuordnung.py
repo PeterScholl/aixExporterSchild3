@@ -1,4 +1,4 @@
-"""Manueller Smoke-Test für Schritt 1 & 2 der Cloud-Gruppen-Zuordnung (siehe TODO.md).
+"""Manueller Smoke-Test für Schritt 1 & 2 der Cloud-Gruppen-Zuordnung (siehe TODO_erledigt.md).
 
 Es geht um die Zielspalte/Zielkategorie einer Lerngruppe, also die Unterscheidung, ob sie beim
 Export als Arbeitsgruppe, Cloud#Kurs oder Cloud#Gruppe behandelt wird (siehe README.md, Abschnitt

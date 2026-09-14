@@ -185,7 +185,7 @@ class Generator():
         self.replaceSpecialChars = True # Sonderzeichen in Gruppen oder Namen ersetzen
         self.exportedFlags = {} # merkt sich für die Button-Führung, welche CSV-Exporte bereits erfolgreich liefen
 
-        # Zuordnung Lerngruppe -> Zielkategorie fürs neue MNSpro-Cloud-Format (siehe TODO.md).
+        # Zuordnung Lerngruppe -> Zielkategorie fürs neue MNSpro-Cloud-Format (siehe TODO_erledigt.md).
         # "Zielspalte"/"Zielkategorie" meint hier immer die Unterscheidung zwischen den drei
         # CSV-Spalten Arbeitsgruppen, Cloud#Kurs und Cloud#Gruppe (siehe README.md, Abschnitt
         # "CSV-Import-Format für MNSpro Cloud"). Zentrale Stelle Ziel-Schlüssel -> CSV-Spaltenname,
@@ -242,7 +242,7 @@ class Generator():
                 print(f"Update self.noTeams to {result}")
                 self.noTeams = result
 
-    def configValues(self, root):
+    def configValues(self, root, focus_password: bool = False):
         cfg = {}
         cfg["schema"] = self.schema if self.schema else "GymAbiLite"
         cfg["host"]= self.host if self.host else "nightly.svws-nrw.de"
@@ -254,7 +254,7 @@ class Generator():
         cfg["kursarten_nur_mit_jahrgang"] = getattr(self,"kursarten_nur_mit_jahrgang", ["LK","GK","WPII","PUT"])
 
        
-        result = show_config_gui(root, cfg)
+        result = show_config_gui(root, cfg, focus_password=focus_password)
        
         if (result):
             print(f"Result: {result}")
@@ -476,7 +476,7 @@ class Generator():
         - self.lookupDict["lerngruppen"]
         - self.lehrer[*]["idsLerngruppen"]
         - self.schueler[*]["idsLerngruppen"]
-        - self.zuordnung_overrides (manuelle Kursart-Overrides, siehe TODO.md Schritt 2)
+        - self.zuordnung_overrides (manuelle Kursart-Overrides, siehe TODO_erledigt.md Schritt 2)
 
         Voraussetzung: idsSchuelerZuLerngruppen wurde bereits ausgeführt - sonst hätte noch keine
         Lerngruppe ein idsSchueler-Feld und es würde fälschlich alles als "leer" gelten.
@@ -529,7 +529,7 @@ class Generator():
                 anz_schueler_verweise += len(ids) - len(neu)
                 schueler["idsLerngruppen"] = neu
 
-        # verwaiste manuelle Kursart-Overrides bereinigen (Schritt 2, siehe TODO.md)
+        # verwaiste manuelle Kursart-Overrides bereinigen (Schritt 2, siehe TODO_erledigt.md)
         anz_overrides = 0
         for lg_id in list(self.zuordnung_overrides.keys()):
             if lg_id in leere_ids:
@@ -696,7 +696,7 @@ class Generator():
         return sorted(vorhandene - set(self.kursart_zuordnung.keys()))
 
     def zuordnung_uebersicht(self) -> str:
-        """Kontroll-/Vorschau-Report (Schritt 4, siehe TODO.md): zeigt je Zielkategorie
+        """Kontroll-/Vorschau-Report (Schritt 4, siehe TODO_erledigt.md): zeigt je Zielkategorie
         (Arbeitsgruppe/Cloud#Kurs/Cloud#Gruppe, siehe self.ziel_spalten) die betroffenen
         Lerngruppen - Grundlage ist get_ziel_fuer_lerngruppe() für jede einzelne Lerngruppe.
         Warnt außerdem vor
@@ -1284,7 +1284,7 @@ class Generator():
         MNSpro-Doku) landet dabei in "arbeitsgruppe", alle anderen Einträge (übliche Team-Namen
         wie "Abi28") in "kurs". Idempotent - kann gefahrlos mehrfach aufgerufen werden, z.B. nach
         jedem Laden einer alten status.json. Gibt einen Hinweistext zurück, wenn tatsächlich
-        migriert wurde, sonst "" (Schritt 6, siehe TODO.md)."""
+        migriert wurde, sonst "" (Schritt 6, siehe TODO_erledigt.md)."""
         migriert = []
         for jahrgang, wert in list(self.jahrgangsteams.items()):
             if isinstance(wert, list):
@@ -1303,7 +1303,7 @@ class Generator():
         der allen Lehrkräften zugeordnet wird) werden zusätzliche Team-Namen für jede
         Zielkategorie (Arbeitsgruppe/Cloud#Kurs/Cloud#Gruppe, siehe self.ziel_spalten) gepflegt -
         z.B. für die EF ein Cloud#Kurs "Abi28". Migriert dabei automatisch noch nicht umgestellte,
-        alte flache Listen (Schritt 6, siehe TODO.md)."""
+        alte flache Listen (Schritt 6, siehe TODO_erledigt.md)."""
         # sicherstellen, dass das Attribut existiert und im neuen Format vorliegt
         if not hasattr(self, "jahrgangsteams") or self.jahrgangsteams is None:
             self.jahrgangsteams = {}

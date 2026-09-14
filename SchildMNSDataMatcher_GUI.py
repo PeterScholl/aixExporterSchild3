@@ -278,13 +278,21 @@ class ReportApp(tk.Tk):
         if hasattr(self.generator, "lookupDict"):
             delattr(self.generator, "lookupDict")
 
+        # Passwort aus Sicherheitsgründen nicht mit abspeichern (siehe TODO.md) - beim nächsten
+        # "Load state" wird es stattdessen über den Verbindungseinstellungen-Dialog neu abgefragt.
+        tmp_password = getattr(self.generator, "password", None)
+        if hasattr(self.generator, "password"):
+            delattr(self.generator, "password")
+
         # Speichern
         self.save_object_to_json(self.generator, "status.json")
         self.report_text.insert(tk.END, "Konfiguration gespeichert!\n")
 
-        # lookupDict zurücksetzen
+        # lookupDict und Passwort zurücksetzen, damit die laufende Sitzung weiterarbeiten kann
         if tmp is not None:
             self.generator.lookupDict = tmp
+        if tmp_password is not None:
+            self.generator.password = tmp_password
 
 
     def load_state(self):
@@ -295,6 +303,12 @@ class ReportApp(tk.Tk):
         self.generator.generateLookups()
         self.report_text.insert(tk.END," DONE\n")
         self.report_text.insert(tk.END, self.generator.normalisiere_jahrgangsteams())
+        if not getattr(self.generator, "password", None):
+            # Passwort wurde bewusst nicht mitgespeichert (siehe save_state) - Verbindungsdialog
+            # direkt mit Fokus auf dem leeren Passwortfeld öffnen, Verbindungsdaten lassen sich
+            # dort bei Bedarf gleich mit korrigieren.
+            self.report_text.insert(tk.END, "🔒 Kein gespeichertes Passwort - bitte erneut eingeben.\n")
+            self.generator.configValues(self, focus_password=True)
         self.refresh_button_highlighting()
 
     def load_object_from_json(self, cls, filename):

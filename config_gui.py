@@ -29,7 +29,7 @@ def save_config(cfg: dict, path: str = CONFIG_PATH):
     with open(path, "w", encoding="utf-8") as f:
         json.dump(cfg, f, ensure_ascii=False, indent=2)
 
-def show_config_gui(master, initial: dict | None = None) -> dict | None:
+def show_config_gui(master, initial: dict | None = None, focus_password: bool = False) -> dict | None:
     if not initial:
         return None
     cfg = initial.copy()
@@ -62,6 +62,13 @@ def show_config_gui(master, initial: dict | None = None) -> dict | None:
     add_row(5, "Abschnitt", s_abs)
     add_row(6, "Kursarten ohne Klasse (kommagetrennt)", e_kurse)
     add_row(7, "Kursarten nur mit Jahrgang (kommagetrennt)", e_jgkurse)
+
+    if focus_password:
+        # z.B. nach "Load state", wenn das Passwort aus Sicherheitsgründen nicht mitgespeichert
+        # wurde (siehe TODO.md) - Cursor direkt ins leere Passwortfeld setzen, damit es sofort
+        # erneut eingegeben werden kann. win.after, da focus_set() direkt nach dem Erzeugen des
+        # noch nicht gemappten Fensters unzuverlässig ist.
+        win.after(50, e_pass.focus_set)
 
     btns = ttk.Frame(win); btns.grid(row=8, column=0, columnspan=2, sticky="e", padx=8, pady=8)
 
