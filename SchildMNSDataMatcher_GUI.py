@@ -5,7 +5,7 @@ import tkinter as tk
 import generator as logic
 import webbrowser
 from tkinter import ttk, messagebox, filedialog
-from ui_widgets import ToolTip
+from ui_widgets import ToolTip, DropdownMenuButton
 
 # Exe erstellen mit: python -m PyInstaller --onefile .\SchildMNSDataMatcher_GUI.py
 
@@ -19,42 +19,30 @@ class ReportApp(tk.Tk):
         # Hauptfenster konfigurieren
         self.title("Schild-MNS-Abgleich")
         self.geometry("800x600")
-        
-        # Menüleiste
-        self.create_menu()
-        
-        
-        # Textbox für den Report
-        frame = tk.Frame(self)
-        frame.pack(fill="both", expand=True, padx=10, pady=10)
 
-        # Textbox
-        self.report_text = tk.Text(frame, height=10, width=50, wrap="none")
-        self.report_text.pack(side="left", fill="both", expand=True)
-
-        # Scrollbar
-        scrollbar = tk.Scrollbar(frame, orient="vertical", command=self.report_text.yview)
-        scrollbar.pack(side="right", fill="y")
-
-        # Verknüpfen
-        self.report_text.config(yscrollcommand=scrollbar.set)
-
-        
-        # Frame für die Buttons
-        button_frame = tk.Frame(self)
-        button_frame.pack(pady=10)
-
-        # Die Buttons im Grid
+        # Nur noch der eigentliche Ablauf-Pfad (Verbindung -> Daten holen -> Zuordnen -> Export)
+        # als Buttons im Grid; Werkzeuge und selten geänderte/dauerhafte Einstellungen wurden in
+        # die beiden Dropdowns "Werkzeuge"/"Dauerhafte Einstellungen" ausgelagert (siehe unten).
         button_texts = [
-            "Verbindungseinstellung", "Abschnitts-ID holen", "Lerngruppen holen","Statistik anzeigen", 
-            "Serverzertifikat laden", "generateLookupDicts", "idsSchuelerZuLerngruppen",
-            "TeamBezRewriteBearbeiten", "TeamBezErstellen",
+            "Verbindungseinstellung", "Abschnitts-ID holen", "Lerngruppen holen",
+            "idsSchuelerZuLerngruppen", "TeamBezErstellen",
             "KursartZuordnung", "Referenz-IDs aus File", "ReferenzIDs aus SuS-Ids", "LehrerReferenzen aus File",
-            "L-ReferenzIDs aus kuerzel", "Jahrgangsteams", "idsLerngruppenZuLehrern","idsKlassenleitungenZuLehrern",
-            "Teams nicht erstellen", "schueler_csv", "sus_extern_csv", "lehrer_csv",
-            "ClearScreen", "show_objekt_by_id", "LeereLerngruppenLöschen", "ErgänzeSchülerAusDB",
-            "ListeTeamBez","Übersicht Lernplattformen","IDs prüfen","ErgänzeLehrerAusDB",
-            "BezeichnungsMusterBearbeiten", "ZuordnungUebersicht", "Schüler aufräumen"
+            "L-ReferenzIDs aus kuerzel", "idsLerngruppenZuLehrern","idsKlassenleitungenZuLehrern",
+            "schueler_csv", "sus_extern_csv", "lehrer_csv",
+        ]
+
+        # Einträge der beiden Dropdowns - dieselben Funktionen wie vorher als Button, nur
+        # ausgelagert. Werkzeuge = jederzeit nutzbare Hilfsfunktionen ohne feste Reihenfolge;
+        # Dauerhafte Einstellungen = Konfiguration, die man selten ändert.
+        werkzeuge_menu_texts = [
+            "Statistik anzeigen", "generateLookupDicts", "ClearScreen", "show_objekt_by_id",
+            "LeereLerngruppenLöschen", "ErgänzeSchülerAusDB", "ListeTeamBez",
+            "Übersicht Lernplattformen", "IDs prüfen", "ErgänzeLehrerAusDB",
+            "ZuordnungUebersicht", "Schüler aufräumen",
+        ]
+        einstellungen_menu_texts = [
+            "Serverzertifikat laden", "TeamBezRewriteBearbeiten", "Jahrgangsteams",
+            "Teams nicht erstellen", "BezeichnungsMusterBearbeiten",
         ]
 
         tooltip = {
@@ -83,7 +71,42 @@ class ReportApp(tk.Tk):
             "Schüler aufräumen": "Eigener, vom normalen schueler_csv-Export komplett unabhängiger\nExport: pro Jahrgang ein fester Wert je Zielspalte, wörtlich\nfür alle Schüler dieses Jahrgangs (keine Lerngruppen-Berechnung).\nleer = Spalte löschen, * = bestehende Zuordnung bleibt beim\nMNSpro-Import erhalten. Auslösen über 'Schüler.csv erstellen'\nim Dialog; der normale schueler_csv-Button bleibt unbeeinflusst.",
             "IDs prüfen": "Prüft für jede Lerngruppe, ob alle in idsLehrer/idsSchueler\nreferenzierten IDs zu einem existierenden Lehrer bzw. Schüler\ngehören - z.B. um Karteileichen durch gelöschte/verschobene\nPersonen in der Schild-DB zu finden.",
         }
-        
+        # Toolbar mit den beiden Dropdowns "Werkzeuge"/"Dauerhafte Einstellungen" - bewusst KEINE
+        # echten tk.Menu-Cascades: Windows/Tk 8.6 feuert das dafür nötige <<MenuSelect>>-Event bei
+        # echtem Maus-Hover teils gar nicht (hier verifiziert), wodurch sich pro Eintrag keine
+        # Tooltips zeigen ließen. DropdownMenuButton (ui_widgets.py) baut die Einträge stattdessen
+        # aus normalen tk.Button-Widgets in einem eigenen Popup - kompatibel zu ToolTip, und die
+        # Einträge lassen sich genau wie die Grid-Buttons einfärben (siehe unten). Optischer
+        # Kompromiss: sitzt direkt unter statt in der nativen Menüleiste, da Windows keine eigenen
+        # Widgets in der nativen Menüleiste erlaubt.
+        toolbar = tk.Frame(self)
+        toolbar.pack(side="top", fill="x", padx=10, pady=(8, 0))
+        werkzeuge_button = DropdownMenuButton(toolbar, "Werkzeuge", werkzeuge_menu_texts,
+                                               tooltips=tooltip, command=self.button_clicked)
+        werkzeuge_button.pack(side="left", padx=(0, 4))
+        einstellungen_button = DropdownMenuButton(toolbar, "Dauerhafte Einstellungen", einstellungen_menu_texts,
+                                                    tooltips=tooltip, command=self.button_clicked)
+        einstellungen_button.pack(side="left")
+
+        # Textbox für den Report
+        frame = tk.Frame(self)
+        frame.pack(fill="both", expand=True, padx=10, pady=10)
+
+        # Textbox
+        self.report_text = tk.Text(frame, height=10, width=50, wrap="none")
+        self.report_text.pack(side="left", fill="both", expand=True)
+
+        # Scrollbar
+        scrollbar = tk.Scrollbar(frame, orient="vertical", command=self.report_text.yview)
+        scrollbar.pack(side="right", fill="y")
+
+        # Verknüpfen
+        self.report_text.config(yscrollcommand=scrollbar.set)
+
+        # Frame für die Buttons
+        button_frame = tk.Frame(self)
+        button_frame.pack(pady=10)
+
         # Buttons in einem <x> times 4 Grid
         self.buttons = {}  # merkt sich die Button-Widgets für die Führungs-Farben
         self.default_button_bg = None
@@ -95,6 +118,15 @@ class ReportApp(tk.Tk):
             self.buttons[text] = button
             if self.default_button_bg is None:
                 self.default_button_bg = button.cget("bg")
+
+        # Die Dropdown-Einträge sind ganz normale tk.Button-Widgets (siehe DropdownMenuButton) -
+        # zusammen mit den Grid-Buttons in dieselbe self.buttons-Verwaltung übernehmen, damit
+        # refresh_button_highlighting() sie identisch einfärben kann, ohne Sonderfall.
+        self.buttons.update(werkzeuge_button.entry_widgets)
+        self.buttons.update(einstellungen_button.entry_widgets)
+
+        # Menüleiste (nur noch "Datei" - siehe create_menu())
+        self.create_menu()
 
         # Einstellungen speichern
         self.sonderzeichenErsetzen = tk.BooleanVar(value=True) #Ersetzt Sonderzeichen aus der Charmap
@@ -354,7 +386,11 @@ class ReportApp(tk.Tk):
         file_menu.add_separator()
         file_menu.add_command(label="Beenden", command=self.quit)
         menubar.add_cascade(label="Datei", menu=file_menu)
-        
+
+        # "Werkzeuge"/"Dauerhafte Einstellungen" sind keine echten Menü-Cascades mehr, sondern
+        # eigene Dropdown-Buttons in einer Toolbar (siehe __init__ und DropdownMenuButton in
+        # ui_widgets.py) - Begründung dort.
+
         # Menüleiste konfigurieren
         self.config(menu=menubar)
     
