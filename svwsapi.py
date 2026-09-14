@@ -12,6 +12,34 @@ base_url = ""
 auth = ()
 verify = True
 
+
+class ZertifikatsFehler(RuntimeError):
+    """Eine Anfrage ist wegen eines SSL-Zertifikatsproblems fehlgeschlagen - typischerweise, weil
+    das gespeicherte server.pem (siehe download_server_cert()) nicht mehr zum aktuellen
+    Serverzertifikat passt (z.B. weil es zwischenzeitlich erneuert wurde). Wird von generator.py
+    (initAbschnittsID/lerngruppenHolen) abgefangen, um dem Nutzer statt der technischen
+    SSLError-Rohmeldung eine klare Meldung samt Abhilfe im Report-Textfeld zu zeigen."""
+
+
+def _get(url, **kwargs):
+    """Dünner Wrapper um requests.get(), der auth/verify aus den Modul-Globals ergänzt und ein
+    SSL-Zertifikatsproblem in eine ZertifikatsFehler mit verständlicher Meldung übersetzt, statt
+    die SSLError nur unbehandelt durchschlagen zu lassen (siehe ZertifikatsFehler)."""
+    kwargs.setdefault("auth", auth)
+    kwargs.setdefault("verify", verify)
+    try:
+        return requests.get(url, **kwargs)
+    except requests.exceptions.SSLError as e:
+        raise ZertifikatsFehler(
+            "Das SSL-Zertifikat des Servers konnte nicht verifiziert werden - vermutlich stimmt\n"
+            "das gespeicherte server.pem nicht mehr mit dem aktuellen Serverzertifikat überein\n"
+            "(z.B. weil es erneuert wurde).\n"
+            "Abhilfe: 'Serverzertifikat laden' erneut ausführen (zu finden unter 'Dauerhafte\n"
+            "Einstellungen'), das überschreibt die gespeicherte Datei mit dem aktuellen Zertifikat.\n"
+            f"(Technisch: {e})"
+        ) from e
+
+
 def download_server_cert(pem_path="server.pem"):
     if not base_url: return None
     if not base_url.startswith("https://"):
@@ -83,8 +111,10 @@ def gibIdSchuljahresabschnitt(jahr: int, abschnitt: int) -> int | None:
     url = f"{base_url}/schule/stammdaten"
     print(f"Zertifikat zur Verifizierung: {verify} - existiert die Datei: {os.path.exists(str(verify))}")
     try:
-        response = requests.get(url, auth=auth, verify=verify)
+        response = _get(url)
         response.raise_for_status()
+    except ZertifikatsFehler:
+        raise  # durchreichen, siehe generator.py initAbschnittsID()
     except Exception as e:
         print(f"Error: {e}")
         return None
@@ -101,14 +131,14 @@ def gibIdSchuljahresabschnitt(jahr: int, abschnitt: int) -> int | None:
 def gibSchuelerListe(abschnitts_id: int) -> list:
     """Holt die Schülerliste über /schueler/abschnitt/{abschnitt}"""
     url = f"{base_url}/schueler/abschnitt/{abschnitts_id}"
-    response = requests.get(url, auth=auth, verify=verify)
+    response = _get(url)
     response.raise_for_status()
     return response.json()
 
 def gibLehrerListe() -> list:
     """Holt die Lehrerliste über /lehrer/"""
     url = f"{base_url}/lehrer"
-    response = requests.get(url, auth=auth, verify=verify)
+    response = _get(url)
     response.raise_for_status()
     return response.json()
 
@@ -117,7 +147,7 @@ def gibSchuelerZuAbschnitt(abschnitt_id: int) -> list:
     """Holt die Schüler-Auswahlliste als gzip-komprimierte JSON und gibt sie als Liste zurück"""
     url = f"{base_url}/schueler/abschnitt/{abschnitt_id}/auswahlliste"
     headers = {"accept": "application/octet-stream"}
-    response = requests.get(url, auth=auth, headers=headers, verify=verify)
+    response = _get(url, headers=headers)
 
     if response.status_code == 403:
         print("⚠️ Zugriff verweigert: Der Benutzer hat keine Rechte, um Schülerdaten anzusehen.")
@@ -140,7 +170,7 @@ def gibSchuelerZuAbschnitt(abschnitt_id: int) -> list:
 def gibLernabschnittsdaten(schueler_id: int, abschnitt_id: int) -> dict:
     """Holt die Lernabschnittsdaten eines Schülers für einen bestimmten Abschnitt"""
     url = f"{base_url}/schueler/{schueler_id}/abschnitt/{abschnitt_id}/lernabschnittsdaten"
-    response = requests.get(url, auth=auth, verify=verify)
+    response = _get(url)
     if response.status_code == 404:
         print(f"⚠️ Keine Lernabschnittsdaten gefunden für Schueler-ID {schueler_id}, Abschnitt {abschnitt_id}")
         return {}
@@ -181,14 +211,14 @@ def gibKursKuerzelListe(lernabschnittsdaten: dict, kurs_map: dict, fach_map: dic
 def gibKurse() -> list:
     """Holt die Liste aller Kurse"""
     url = f"{base_url}/kurse"
-    response = requests.get(url, auth=auth, verify=verify)
+    response = _get(url)
     response.raise_for_status()
     return response.json()
 
 def gibKurseDesAbschnitts(abschnitt_id: int) -> list:
     """Holt alle Kurse eines Schuljahresabschnitts, gibt Liste zurück"""
     url = f"{base_url}/kurse/abschnitt/{abschnitt_id}"
-    response = requests.get(url, auth=auth, verify=verify)
+    response = _get(url)
 
     if response.status_code == 403:
         print("⚠️ Zugriff verweigert: Der Benutzer hat keine Rechte, um Kursdaten anzusehen.")
@@ -205,21 +235,21 @@ def gibKurseDesAbschnitts(abschnitt_id: int) -> list:
 def gibFaecher() -> list:
     """Holt die Liste aller Kurse"""
     url = f"{base_url}/faecher"
-    response = requests.get(url, auth=auth, verify=verify)
+    response = _get(url)
     response.raise_for_status()
     return response.json()
 
 def gibKlassen(abschnitt_id: int) -> list:
     """Holt die Klassenliste für einen bestimmten Abschnitt"""
     url = f"{base_url}/klassen/abschnitt/{abschnitt_id}"
-    response = requests.get(url, auth=auth, verify=verify)
+    response = _get(url)
     response.raise_for_status()
     return response.json()
 
 def gibLernplattformenUebersicht() -> dict:
     """Holt die Übersicht aller Lernplattformen in dem Schema"""
     url = f"{base_url}/schule/lernplattformen"
-    response = requests.get(url, auth=auth, verify=verify)
+    response = _get(url)
 
     if response.status_code == 403:
         print("⚠️ Zugriff verweigert: Keine Rechte für Lernplattform-Export.")
@@ -242,7 +272,7 @@ def gibLerngruppen(abschnitt_id: int, lernplattform_id: int) -> dict:
     #url = f"{base_url}/v1/lernplattformen/{lernplattform_id}/{abschnitt_id}"
     url = f"{base_url.replace('/db', '/api/external')}/v1/lernplattformen/{lernplattform_id}/{abschnitt_id}"
     print(f"Die URL für den API-Endpunkt: {url}")
-    response = requests.get(url, auth=auth, verify=verify)
+    response = _get(url)
 
     if response.status_code == 403:
         print("⚠️ Zugriff verweigert: Keine Rechte für Lernplattform-Export.")

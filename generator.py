@@ -217,13 +217,15 @@ class Generator():
 
             if step == WorkflowStep.ABSCHNITT_VERBUNDEN:
                 if not self.initAbschnittsID():
-                    protokoll.append("⛔ Abschnitts-ID konnte nicht ermittelt werden (siehe Console) - bitte Verbindungseinstellungen prüfen.")
+                    protokoll.append(f"⛔ {self.letzter_verbindungsfehler}" if self.letzter_verbindungsfehler else
+                                      "⛔ Abschnitts-ID konnte nicht ermittelt werden (siehe Console) - bitte Verbindungseinstellungen prüfen.")
                     return self._auto_bericht(protokoll, abgeschlossen=False)
                 protokoll.append(f"✅ Abschnitts-ID geholt: {self.svws_abschnitts_id}")
 
             elif step == WorkflowStep.LERNGRUPPEN_GEHOLT:
                 if not self.lerngruppenHolen():
-                    protokoll.append("⛔ Lerngruppen konnten nicht geholt werden (siehe Console) - bitte Verbindungseinstellungen prüfen.")
+                    protokoll.append(f"⛔ {self.letzter_verbindungsfehler}" if self.letzter_verbindungsfehler else
+                                      "⛔ Lerngruppen konnten nicht geholt werden (siehe Console) - bitte Verbindungseinstellungen prüfen.")
                     return self._auto_bericht(protokoll, abgeschlossen=False)
                 protokoll.append(f"✅ {len(self.lerngruppen)} Lerngruppen geholt")
 
@@ -324,6 +326,10 @@ class Generator():
         self.jahr = 2018
         self.abschnitt = 1
         self.svws_abschnitts_id = None
+        # Klartext-Meldung, wenn initAbschnittsID()/lerngruppenHolen() zuletzt an einem
+        # SSL-Zertifikatsproblem gescheitert sind (siehe sv.ZertifikatsFehler) - wird von der GUI
+        # im Report-Textfeld angezeigt statt der sonst nur in der Console sichtbaren Rohmeldung.
+        self.letzter_verbindungsfehler = None
         self.kursarten_ohne_klasse = []
         self.lookupDict = {} # Dictionaries, die zur jeweiligen ID einen Verweis auf das zugehörige Objekt liefern
         # {jahrgang: {"arbeitsgruppe": [...], "kurs": [...], "gruppe": [...]}} - je Zielkategorie
@@ -375,7 +381,17 @@ class Generator():
 
     def initAbschnittsID(self):
         sv.setConfig(self.base_url, (self.username, self.password))
-        self.svws_abschnitts_id = sv.gibIdSchuljahresabschnitt(self.jahr, self.abschnitt)
+        self.letzter_verbindungsfehler = None
+        try:
+            self.svws_abschnitts_id = sv.gibIdSchuljahresabschnitt(self.jahr, self.abschnitt)
+        except sv.ZertifikatsFehler as ex:
+            # Klare, konkrete Meldung statt der bisher nur in der Console verschwindenden
+            # SSLError-Rohmeldung - self.letzter_verbindungsfehler wird von der GUI ausgelesen
+            # und im Report-Textfeld angezeigt (siehe SchildMNSDataMatcher_GUI.py).
+            self.svws_abschnitts_id = None
+            self.letzter_verbindungsfehler = str(ex)
+            print(f"⚠️ {ex}")
+            return False
 
         if self.svws_abschnitts_id:
             print(f"✅ Gefundene ID des Schuljahresabschnitts ({self.jahr}.{self.abschnitt}): {self.svws_abschnitts_id}")
@@ -421,8 +437,15 @@ class Generator():
 
     def lerngruppenHolen(self, keys = ["jahrgaenge","klassen","lehrer","faecher","lerngruppen", "schueler"]):
         self.initAbschnittsID()
+        if self.letzter_verbindungsfehler:
+            return {}  # initAbschnittsID ist schon an einem Zertifikatsproblem gescheitert
         #sv.setConfig(self.base_url, (self.username, self.password))
-        lerngruppen_export = sv.gibLerngruppen(self.svws_abschnitts_id,1) # Lerngruppe ID 1 ist lms.logineo
+        try:
+            lerngruppen_export = sv.gibLerngruppen(self.svws_abschnitts_id,1) # Lerngruppe ID 1 ist lms.logineo
+        except sv.ZertifikatsFehler as ex:
+            self.letzter_verbindungsfehler = str(ex)
+            print(f"⚠️ {ex}")
+            return {}
         for key, value in lerngruppen_export.items():
             if key in keys:
                 print(f"Key von Lerngruppen wird übertragen: {key}")

@@ -172,6 +172,8 @@ class ReportApp(tk.Tk):
             case "Abschnitts-ID holen":
                 if (self.generator.initAbschnittsID()):
                     self.report_text.insert(tk.END,f"Abschnitts-ID: {self.generator.svws_abschnitts_id}\n")
+                elif self.generator.letzter_verbindungsfehler:
+                    self.report_text.insert(tk.END, f"⚠️ {self.generator.letzter_verbindungsfehler}\n")
                 else:
                     self.report_text.insert(tk.END,f"⚠️Nicht erfolgreich - evtl. Authentifizierung fehlerhaft (siehe Console)\n")
             case "Übersicht Lernplattformen":
@@ -185,6 +187,8 @@ class ReportApp(tk.Tk):
             case "Lerngruppen holen":
                 if (self.generator.lerngruppenHolen()):
                     self.report_text.insert(tk.END,f"Lerngruppen geholt\n")
+                elif self.generator.letzter_verbindungsfehler:
+                    self.report_text.insert(tk.END, f"⚠️ {self.generator.letzter_verbindungsfehler}\n")
                 else:
                     self.report_text.insert(tk.END,f"⚠️Nicht erfolgreich - evtl. keine Lerngruppen/fehlende Authentifizierung - siehe auch Console\n")
                 self.report_text.see(tk.END)
@@ -351,10 +355,9 @@ class ReportApp(tk.Tk):
         self.report_text.insert(tk.END," DONE\n")
         self.report_text.insert(tk.END, self.generator.normalisiere_jahrgangsteams())
         if not getattr(self.generator, "password", None):
-            # Passwort wurde bewusst nicht mitgespeichert (siehe save_state) - Verbindungsdialog
+            # Passwort wird grundsätzlich nie mitgespeichert (siehe save_state) - Verbindungsdialog
             # direkt mit Fokus auf dem leeren Passwortfeld öffnen, Verbindungsdaten lassen sich
             # dort bei Bedarf gleich mit korrigieren.
-            self.report_text.insert(tk.END, "🔒 Kein gespeichertes Passwort - bitte erneut eingeben.\n")
             self.generator.configValues(self, focus_password=True)
         self.refresh_button_highlighting()
 
