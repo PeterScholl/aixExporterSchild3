@@ -99,6 +99,9 @@ def show_config_gui(master, initial: dict | None = None, focus_password: bool = 
         win.destroy()
 
     win.protocol("WM_DELETE_WINDOW", on_cancel)
+    # Enter im Passwortfeld (z.B. nach "Load state", siehe focus_password) übernimmt/schließt
+    # direkt, wie ein Klick auf "Speichern & Schließen" - kein zusätzlicher Mausklick nötig.
+    e_pass.bind("<Return>", lambda event: on_save_close())
 
     ttk.Button(btns, text="Abbrechen", command=on_cancel).pack(side="right", padx=6)
     ttk.Button(btns, text="Speichern & Schließen", command=on_save_close).pack(side="right")
