@@ -198,6 +198,10 @@ class Generator():
         # zu prüfen), Auto bereitet nur alles Nötige dafür vor.
         EXPORT_MANUELL = {WorkflowStep.SCHUELER_CSV, WorkflowStep.SUS_EXTERN_CSV, WorkflowStep.LEHRER_CSV}
         export_ausstehend = False
+        # Anzahl Schüler/Lehrer, die mangels individueller Zuordnung ersatzweise ihre SVWS-ID/ihr
+        # Kürzel als Referenz-ID erhalten haben (siehe _wende_referenz_id_mapping_an) - für die
+        # Zusammenfassung am Ende gesammelt, damit es dort nochmal deutlich auffällt.
+        standard_referenz_id = {}
 
         for step, _buttons, done_fn in self.REQUIRED_CHAIN:
             if step in EXPORT_MANUELL:
@@ -253,7 +257,8 @@ class Generator():
                                       "- bitte einmal manuell 'Referenz-IDs aus File' ausführen (oder alternativ "
                                       "'ReferenzIDs aus SuS-Ids', falls die SVWS-IDs 1:1 als Referenz übernommen werden sollen).")
                     return self._auto_bericht(protokoll, abgeschlossen=False)
-                protokoll.append(self._wende_referenz_id_mapping_an(mapping, "schueler", "id").rstrip("\n"))
+                text, standard_referenz_id["Schüler"] = self._wende_referenz_id_mapping_an(mapping, "schueler", "id")
+                protokoll.append(text.rstrip("\n"))
 
             elif step == WorkflowStep.LERNGRUPPEN_ZU_LEHRERN:
                 anzahl = self.addLerngruppenIdsZuLuL()
@@ -270,16 +275,23 @@ class Generator():
                                       "- bitte einmal manuell 'LehrerReferenzen aus File' ausführen (oder alternativ "
                                       "'L-ReferenzIDs aus kuerzel').")
                     return self._auto_bericht(protokoll, abgeschlossen=False)
-                protokoll.append(self._wende_referenz_id_mapping_an(mapping, "lehrer", "kuerzel").rstrip("\n"))
+                text, standard_referenz_id["Lehrer"] = self._wende_referenz_id_mapping_an(mapping, "lehrer", "kuerzel")
+                protokoll.append(text.rstrip("\n"))
 
-        return self._auto_bericht(protokoll, abgeschlossen=True, export_ausstehend=export_ausstehend)
+        return self._auto_bericht(protokoll, abgeschlossen=True, export_ausstehend=export_ausstehend,
+                                   standard_referenz_id=standard_referenz_id)
 
-    def _auto_bericht(self, protokoll: list, abgeschlossen: bool, export_ausstehend: bool = False) -> str:
+    def _auto_bericht(self, protokoll: list, abgeschlossen: bool, export_ausstehend: bool = False,
+                       standard_referenz_id: dict | None = None) -> str:
         """Baut den Ergebnistext von auto_ablauf() zusammen: Protokoll der ausgeführten Schritte,
         Erfolgs-/Stopp-Meldung, und - deutlich abgesetzt - alle aktuell wirksamen "Dauerhaften
         Einstellungen", damit sie im Übersichtsfenster (Report-Textfeld) nicht untergehen.
         export_ausstehend: mindestens einer der drei CSV-Exporte (die Auto bewusst nicht selbst
-        auslöst) ist noch nicht erstellt - nur relevant, wenn abgeschlossen=True."""
+        auslöst) ist noch nicht erstellt - nur relevant, wenn abgeschlossen=True.
+        standard_referenz_id: {"Schüler"/"Lehrer": Anzahl}, die mangels individueller Zuordnung
+        ersatzweise ihre SVWS-ID/ihr Kürzel als Referenz-ID erhalten haben (siehe
+        _wende_referenz_id_mapping_an) - wird hier nochmal deutlich hervorgehoben, damit es nicht
+        in der einzelnen Protokollzeile des jeweiligen Schritts übersehen wird."""
         text = "\n".join(protokoll) + "\n\n"
         if not abgeschlossen:
             text += "⏸️ Automatischer Ablauf angehalten - siehe ⛔-Zeile oben für den nötigen manuellen Schritt.\n"
@@ -288,6 +300,12 @@ class Generator():
                       "manuell über die jeweiligen Buttons erstellen (siehe ➡️-Zeilen oben).\n")
         else:
             text += "✅ Automatischer Ablauf komplett durchgelaufen - alle Pflichtschritte erledigt.\n"
+
+        betroffene = {art: anzahl for art, anzahl in (standard_referenz_id or {}).items() if anzahl}
+        if betroffene:
+            text += "\n⚠️⚠️⚠️ ACHTUNG: Standard-Referenz-ID statt individueller Zuordnung verwendet ⚠️⚠️⚠️\n"
+            for art, anzahl in betroffene.items():
+                text += f"- {anzahl} {art} ohne individuelle Referenz-ID (SVWS-ID/Kürzel als Ersatz verwendet)\n"
 
         besonderheiten = self._besonderheiten_dauerhafte_einstellungen()
         if besonderheiten:
@@ -450,6 +468,15 @@ class Generator():
             if key in keys:
                 print(f"Key von Lerngruppen wird übertragen: {key}")
                 setattr(self, key, value)
+
+        if lerngruppen_export:
+            # Der komplette Datenbestand wurde gerade durch einen frischen Abzug ersetzt - alle
+            # bisherigen CSV-Exporte (schueler_csv/sus_extern_csv/lehrer_csv) beziehen sich damit
+            # auf veraltete Daten und dürfen nicht mehr als "bereits erledigt" (blau) gelten, bis
+            # sie mit den neuen Daten erneut erstellt wurden.
+            for flag in ("schueler_csv", "sus_extern_csv", "lehrer_csv"):
+                self.exportedFlags.pop(flag, None)
+
         return lerngruppen_export
 
     def ergaenzeLehrer(self):
@@ -1097,7 +1124,10 @@ class Generator():
                     anzahl_zusatz += 1
                 count += anzahl_zusatz
         if anzahl_zusatz:
-            ergText += f"➕ {anzahl_zusatz} zusätzliche Schüler aus gespeicherter CSV angehängt\n"
+            # Deutlich hervorgehoben (wie die BESONDERHEITEN-Box bei Auto), damit nicht übersehen
+            # wird, dass die CSV zusätzliche, nicht aus Schild3 stammende Schüler enthält.
+            ergText += (f"\n⚠️⚠️⚠️ ACHTUNG: {anzahl_zusatz} zusätzliche Schüler aus 'Zusätzliche "
+                        f"Schüler' (Dauerhafte Einstellungen) wurden mit in die CSV aufgenommen ⚠️⚠️⚠️\n")
         if jahrgangs_override is not None:
             ergText += "ℹ️ Schüler aufräumen: Spaltenwerte wurden wörtlich je Jahrgang eingetragen, keine Lerngruppen-Berechnung:\n"
             for jahrgang in sorted(jahrgangs_override):
@@ -1451,14 +1481,16 @@ class Generator():
         win.wait_window()
         return antwort["wert"]
 
-    def _wende_referenz_id_mapping_an(self, mapping: dict, art: str, idBez: str) -> str:
+    def _wende_referenz_id_mapping_an(self, mapping: dict, art: str, idBez: str) -> tuple[str, int]:
         """Trägt eine {idBez-Wert: Referenz-ID}-Zuordnung in alle Objekte von self.<art> ein
         (Schritt "Objekte aktualisieren" von import_referenz_ids, ausgelagert, damit er sowohl
         nach dem Einlesen einer neuen Datei als auch bei Wiederverwendung der in
         self.referenz_id_mapping/status.json gespeicherten Zuordnung genutzt werden kann).
         JSON kennt nur String-Schlüssel - beim Speichern/Laden über status.json werden z.B.
         numerische Schüler-IDs also zu Strings ("123" statt 123). Deshalb hier zusätzlich mit
-        str(objid) nachschlagen, falls der Wert selbst nicht passt."""
+        str(objid) nachschlagen, falls der Wert selbst nicht passt.
+        Gibt (Ergebnistext, Anzahl der Objekte ohne individuelle Zuordnung) zurück - Letzteres,
+        damit auto_ablauf() das in der Zusammenfassung nochmal deutlich hervorheben kann."""
         count_ref = 0
         count_id = 0
         for obj in getattr(self, art, []):
@@ -1471,7 +1503,8 @@ class Generator():
                 obj["referenzId"] = objid
                 print(f"ACHTUNG: {objid} erhält keine Referenz-ID")
                 count_id += 1
-        return f"{count_ref} Referenz-IDs zugewisen - {count_id} mal die {idBez} als Referenz\n"
+        text = f"{count_ref} Referenz-IDs zugewisen - {count_id} mal die {idBez} als Referenz\n"
+        return text, count_id
 
     def import_referenz_ids(self, master, art="schueler", idBez="id"):
         """CSV wählen, Spalten für ID und Referenz-ID wählen und zuweisen. Die eingelesene
@@ -1490,7 +1523,8 @@ class Generator():
             if wahl == "abbrechen":
                 return "Abgebrochen\n"
             if wahl == "json":
-                return self._wende_referenz_id_mapping_an(gespeicherte_mapping, art, idBez)
+                text, _anzahl_standard = self._wende_referenz_id_mapping_an(gespeicherte_mapping, art, idBez)
+                return text
             # sonst: wahl == "datei" -> unten wie gewohnt eine neue Datei einlesen
 
         # CSV-Datei auswählen
@@ -1554,7 +1588,8 @@ class Generator():
         # nächsten Mal wiederverwendet werden kann.
         self.referenz_id_mapping[art] = result["mapping"]
 
-        return self._wende_referenz_id_mapping_an(result["mapping"], art, idBez)
+        text, _anzahl_standard = self._wende_referenz_id_mapping_an(result["mapping"], art, idBez)
+        return text
 
     def normalisiere_jahrgangsteams(self) -> str:
         """Migriert self.jahrgangsteams vom alten Format ({jahrgang: [Namen]}) auf das neue
