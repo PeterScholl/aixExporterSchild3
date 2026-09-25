@@ -45,6 +45,7 @@ class ReportApp(tk.Tk):
         einstellungen_menu_texts = [
             "Serverzertifikat laden", "TeamBezRewriteBearbeiten", "Jahrgangsteams",
             "Teams nicht erstellen", "BezeichnungsMusterBearbeiten", "Zusätzliche Schüler",
+            "Schüler ausschließen",
         ]
 
         tooltip = {
@@ -70,6 +71,7 @@ class ReportApp(tk.Tk):
             "ErgänzeSchülerAusDB": "holt ggf. fehlende Schüler über GET /schueler/abschnitt/{abschnittId}",
             "LeereLerngruppenLöschen": "Löscht Lerngruppen ohne Schüler\n(z.B. in der Planungsphase eines Schuljahres hilfreich)\nBereinigt dabei auch die Verweise bei Lehrern und Schülern\n(idsLerngruppen) sowie im Lookup-Dict und bei Kursart-Overrides.\nFragt vorher zur Sicherheit nach.",
             "BezeichnungsMusterBearbeiten": "Regex-Muster auf die Team-Bezeichnung einer Lerngruppe,\ndie VOR der kursartKuerzel-Regel über die Zielkategorie\n(Arbeitsgruppe/Cloud#Kurs/Cloud#Gruppe) entscheiden.\nReihenfolge in der Liste = Priorität, erstes Match gewinnt.",
+            "Schüler ausschließen": "Pflegt eine Liste von Schülern, die grundsätzlich nicht verarbeitet\nwerden (Suche per Namensteil oder ID). Wird in status.json gespeichert\nund bei jedem 'Lerngruppen holen' erneut angewandt - auch wenn der\nSchüler versehentlich aus Schild exportiert wird.",
             "Zusätzliche Schüler": "Liest eine CSV-Datei im Format der schueler_csv-Ausgabe ein\nund merkt sich deren Zeilen - werden beim nächsten Erzeugen von\n'Student.csv' automatisch angehängt (z.B. für Schüler, die\nnicht in Schild3 geführt werden).",
             "ZuordnungUebersicht": "Kontrolle vor dem Export: zeigt je Zielkategorie\n(Arbeitsgruppe/Cloud#Kurs/Cloud#Gruppe) die betroffenen Lerngruppen,\nwarnt vor nicht klassifizierten Lerngruppen und vor Team-Bezeichnungen,\ndie in mehreren Zielkategorien gleichzeitig auftauchen.",
             "Schüler aufräumen": "Eigener, vom normalen schueler_csv-Export komplett unabhängiger\nExport: pro Jahrgang ein fester Wert je Zielspalte, wörtlich\nfür alle Schüler dieses Jahrgangs (keine Lerngruppen-Berechnung).\nleer = Spalte löschen, * = bestehende Zuordnung bleibt beim\nMNSpro-Import erhalten. Auslösen über 'Schüler.csv erstellen'\nim Dialog; der normale schueler_csv-Button bleibt unbeeinflusst.",
@@ -186,7 +188,7 @@ class ReportApp(tk.Tk):
                 self.report_text.see(tk.END)
             case "Lerngruppen holen":
                 if (self.generator.lerngruppenHolen()):
-                    self.report_text.insert(tk.END,f"Lerngruppen geholt\n")
+                    self.report_text.insert(tk.END,f"Lerngruppen geholt\n" + self.generator.letzte_ausschluss_meldung)
                 elif self.generator.letzter_verbindungsfehler:
                     self.report_text.insert(tk.END, f"⚠️ {self.generator.letzter_verbindungsfehler}\n")
                 else:
@@ -203,6 +205,11 @@ class ReportApp(tk.Tk):
                 self.report_text.see(tk.END)
             case "BezeichnungsMusterBearbeiten":
                 self.generator.edit_bezeichnung_muster(self)
+            case "Schüler ausschließen":
+                ergebnis = self.generator.edit_schueler_ausschluss(self)
+                if ergebnis:
+                    self.report_text.insert(tk.END, ergebnis)
+                    self.report_text.see(tk.END)
             case "Zusätzliche Schüler":
                 ergebnis = self.generator.edit_zusaetzliche_schueler(self)
                 if ergebnis:

@@ -7,7 +7,7 @@ import os
 from collections import Counter
 from enum import Enum
 from config_gui import load_config, show_config_gui, show_noteam_gui
-from ui_widgets import ToolTip
+from ui_widgets import ToolTip, SearchSelectList
 import fetch
 import svwsapi as sv
 import config_gui
@@ -232,6 +232,8 @@ class Generator():
                                       "⛔ Lerngruppen konnten nicht geholt werden (siehe Console) - bitte Verbindungseinstellungen prüfen.")
                     return self._auto_bericht(protokoll, abgeschlossen=False)
                 protokoll.append(f"✅ {len(self.lerngruppen)} Lerngruppen geholt")
+                if self.letzte_ausschluss_meldung:
+                    protokoll.append(self.letzte_ausschluss_meldung.rstrip("\n"))
 
             elif step == WorkflowStep.LOOKUPS_ERSTELLT:
                 self.generateLookups()
@@ -327,6 +329,8 @@ class Generator():
         )
         if jahrgangsteams_aktiv:
             zeilen.append(f"- Jahrgangsteams konfiguriert für: {', '.join(jahrgangsteams_aktiv)}")
+        if self.schueler_ausschluss:
+            zeilen.append(f"- {len(self.schueler_ausschluss)} Schüler stehen auf der Ausschlussliste und werden nicht verarbeitet")
         if self.noTeams:
             zeilen.append(f"- {len(self.noTeams)} Team(s) von der Erstellung ausgeschlossen (Teams nicht erstellen)")
         if self.bezeichnung_muster:
@@ -393,6 +397,12 @@ class Generator():
         # Einstellungen" > "Zusätzliche Schüler"). Wird beim Erzeugen von Student.csv automatisch
         # angehängt, z.B. für Schüler, die nicht in Schild3 geführt werden.
         self.zusaetzliche_schueler_csv_zeilen = []
+        # {Schüler-ID (als String, da JSON nur String-Schlüssel kennt): "ID - Nachname, Vorname
+        # (Klasse)"} - Schüler, die grundsätzlich NICHT verarbeitet werden (siehe
+        # edit_schueler_ausschluss()/wende_schueler_ausschluss_an()). Der Name wird mitgespeichert,
+        # damit die Liste lesbar bleibt, auch wenn der Schüler nicht mehr in self.schueler steht.
+        self.schueler_ausschluss = {}
+        self.letzte_ausschluss_meldung = ""  # Log des letzten wende_schueler_ausschluss_an()
         sv.setConfig(self.base_url, (self.username, self.password))
         if os.path.exists("server.pem"):
             sv.verify="server.pem"
@@ -478,6 +488,9 @@ class Generator():
             # sie mit den neuen Daten erneut erstellt wurden.
             for flag in ("schueler_csv", "sus_extern_csv", "lehrer_csv"):
                 self.exportedFlags.pop(flag, None)
+            # Ausgeschlossene Schüler sofort wieder entfernen, bevor irgendein Folgeschritt
+            # (idsSchuelerZuLerngruppen, TeamBez, ...) sie sieht.
+            self.letzte_ausschluss_meldung = self.wende_schueler_ausschluss_an()
 
         return lerngruppen_export
 
@@ -545,6 +558,9 @@ class Generator():
                 continue
             if s.get("status") not in statusList:
                 countStatus += 1
+                continue
+            if str(sid) in self.schueler_ausschluss:
+                ergText += f'🚫 Schüler {s.get("nachname","?")}, {s.get("vorname","?")} (id {sid}) steht auf der Ausschlussliste - übersprungen\n'
                 continue
             ergText += f'Schüler {s.get("nachname","?")}, {s.get("vorname","?")} mit id {sid} wird übernommen\n'
             self.lookupDict["schueler"][sid] = s
@@ -1238,6 +1254,103 @@ class Generator():
         win.wait_window()
 
         return ergebnis["text"]
+
+    def _schueler_anzeige(self, s: dict) -> str:
+        """Anzeigetext "ID - Nachname, Vorname (Klasse)" für Schüler-Listen (Ausschlussliste etc.)."""
+        try:
+            klasse = self.get_klasse_von_schueler(s.get("id"))
+        except Exception:
+            klasse = None  # z.B. Lookup-Dicts noch nicht erstellt
+        return f'{s.get("id")} - {s.get("nachname", "?")}, {s.get("vorname", "?")} ({klasse or "ohne Klasse"})'
+
+    def wende_schueler_ausschluss_an(self) -> str:
+        """Entfernt alle Schüler der Ausschlussliste (self.schueler_ausschluss) aus self.schueler,
+        dem Lookup-Dict und den idsSchueler der Lerngruppen. Wird direkt nach jedem frischen
+        Abzug (lerngruppenHolen) und nach Änderungen im Ausschluss-Dialog aufgerufen, damit die
+        Schüler in keinem Folgeschritt und keiner CSV mehr auftauchen. Gibt einen Logtext zurück
+        ("" wenn niemand betroffen war)."""
+        if not self.schueler_ausschluss:
+            return ""
+        entfernt = [s for s in getattr(self, "schueler", []) if str(s.get("id")) in self.schueler_ausschluss]
+        if not entfernt:
+            return ""
+        ids = {s.get("id") for s in entfernt}
+        # Namen (inkl. Klasse aus dem Lookup) VOR dem Entfernen bilden - danach wäre die Klasse
+        # nicht mehr ermittelbar ("ohne Klasse").
+        namen = "; ".join(self._schueler_anzeige(s) for s in entfernt)
+        self.schueler = [s for s in self.schueler if s.get("id") not in ids]
+        for sid in ids:
+            self.lookupDict.get("schueler", {}).pop(sid, None)
+        for lg in getattr(self, "lerngruppen", []):
+            if "idsSchueler" in lg:
+                lg["idsSchueler"] = [i for i in lg["idsSchueler"] if i not in ids]
+        return f"🚫 {len(entfernt)} Schüler laut Ausschlussliste entfernt: {namen}\n"
+
+    def edit_schueler_ausschluss(self, master) -> str:
+        """Dialog "Schüler ausschließen" ("Dauerhafte Einstellungen"): pflegt
+        self.schueler_ausschluss. Oben werden Schüler über Teile des Namens oder der ID gesucht
+        (SearchSelectList) und per Button/Doppelklick ausgeschlossen, unten stehen die bereits
+        ausgeschlossenen. Ein Ausschluss wirkt sofort (Schüler werden aus den geladenen Daten
+        entfernt) und bleibt in status.json gespeichert, greift also auch bei jedem neuen
+        "Lerngruppen holen". "Wieder aufnehmen" wirkt erst nach einem erneuten "Lerngruppen holen".
+        Gibt einen Logtext für das Report-Textfeld zurück, sonst ""."""
+        if not getattr(self, "schueler", []) and not self.schueler_ausschluss:
+            messagebox.showinfo("Schüler ausschließen",
+                "Keine Schüler vorhanden - bitte zuerst Lerngruppen holen.", parent=master)
+            return ""
+
+        win = tk.Toplevel(master)
+        win.title("Schüler ausschließen")
+        win.transient(master)
+        win.grab_set()
+        win.geometry("560x560")
+        win.columnconfigure(0, weight=1)
+        win.rowconfigure(1, weight=1)
+        win.rowconfigure(4, weight=1)
+
+        ttk.Label(win, text="Schüler suchen (Teil des Namens oder der ID) und ausschließen:") \
+            .grid(row=0, column=0, sticky="w", padx=8, pady=(10, 4))
+
+        def kandidaten():
+            return [s for s in self.schueler if str(s.get("id")) not in self.schueler_ausschluss]
+
+        def ausschliessen(_obj=None):
+            for s in suche.get_selected():
+                self.schueler_ausschluss[str(s.get("id"))] = self._schueler_anzeige(s)
+            aktualisieren()
+
+        suche = SearchSelectList(win, kandidaten(), display=self._schueler_anzeige, on_activate=ausschliessen)
+        suche.grid(row=1, column=0, sticky="nsew", padx=8)
+        ttk.Button(win, text="Markierte ausschließen", command=ausschliessen).grid(row=2, column=0, sticky="e", padx=8, pady=4)
+
+        ttk.Label(win, text="Bereits ausgeschlossen:").grid(row=3, column=0, sticky="w", padx=8, pady=(8, 2))
+        lb = tk.Listbox(win, exportselection=False, selectmode=tk.EXTENDED, height=8)
+        lb.grid(row=4, column=0, sticky="nsew", padx=8)
+
+        def aufnehmen():
+            eintraege = sorted(self.schueler_ausschluss.items(), key=lambda kv: kv[1])
+            for i in lb.curselection():
+                self.schueler_ausschluss.pop(eintraege[i][0], None)
+            aktualisieren()
+
+        def aktualisieren():
+            suche.set_items(kandidaten())
+            lb.delete(0, tk.END)
+            for _sid, name in sorted(self.schueler_ausschluss.items(), key=lambda kv: kv[1]):
+                lb.insert(tk.END, name)
+
+        btns = ttk.Frame(win)
+        btns.grid(row=5, column=0, sticky="e", padx=8, pady=8)
+        ttk.Button(btns, text="Wieder aufnehmen (wirkt nach erneutem 'Lerngruppen holen')",
+                   command=aufnehmen).pack(side="left", padx=4)
+        ttk.Button(btns, text="Schließen", command=win.destroy).pack(side="left", padx=4)
+
+        aktualisieren()
+        suche.focus_search()
+        win.protocol("WM_DELETE_WINDOW", win.destroy)
+        win.wait_window()
+
+        return self.wende_schueler_ausschluss_an()
 
     def edit_schueler_aufraeumen(self, master) -> str:
         """Dialog zur Pflege von self.schueler_aufraeumen_werte UND (über den eigenen Button

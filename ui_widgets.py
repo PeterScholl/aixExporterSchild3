@@ -4,6 +4,7 @@ Ausgelagert aus SchildMNSDataMatcher_GUI.py, damit auch generator.py (z.B. für 
 Kursart-Zuordnungs-Dialog) Tooltips anzeigen kann, ohne die GUI-Datei zu importieren.
 """
 import tkinter as tk
+from tkinter import ttk
 
 
 class ToolTip:
@@ -137,3 +138,79 @@ class DropdownMenuButton(tk.Button):
             self.after_cancel(self._poll_id)
             self._poll_id = None
         self.popup.withdraw()
+
+
+class SearchSelectList(ttk.Frame):
+    """Such-/Auswahl-Widget: Suchfeld + Trefferliste über eine beliebige Objektliste (Schüler,
+    Lehrer, Lerngruppen, ...). Filtert live nach Teilen des Namens ODER der ID - alle durch
+    Leerzeichen getrennten Suchbegriffe müssen (Groß/Klein egal, als Teilstring) im Anzeigetext
+    oder in der ID vorkommen, z.B. "muster ef" oder "1234".
+
+    items: Liste beliebiger Objekte (i.d.R. Dicts). display(obj) -> Anzeigetext der Zeile;
+    id_of(obj) -> ID (wird zusätzlich zum Anzeigetext durchsucht). multi: Mehrfachauswahl.
+    on_activate(obj): optional, wird bei Doppelklick/Enter auf eine Zeile aufgerufen.
+    Auswahl abfragen: get_selected() (Liste der Objekte); Inhalt tauschen: set_items()."""
+
+    def __init__(self, master, items, display, id_of=lambda o: o.get("id"), multi=True,
+                 on_activate=None, height=10, **kwargs):
+        super().__init__(master, **kwargs)
+        self._display = display
+        self._id_of = id_of
+        self._on_activate = on_activate
+        self._items = []
+        self._shown = []  # aktuell in der Listbox angezeigte Objekte (gleiche Reihenfolge)
+
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(1, weight=1)
+
+        self._suche = tk.StringVar()
+        self._suche.trace_add("write", lambda *_: self._filtern())
+        ttk.Entry(self, textvariable=self._suche).grid(row=0, column=0, sticky="ew", pady=(0, 4))
+
+        rahmen = ttk.Frame(self)
+        rahmen.grid(row=1, column=0, sticky="nsew")
+        rahmen.columnconfigure(0, weight=1)
+        rahmen.rowconfigure(0, weight=1)
+        self._lb = tk.Listbox(rahmen, height=height, exportselection=False,
+                              selectmode=tk.EXTENDED if multi else tk.SINGLE)
+        sb = ttk.Scrollbar(rahmen, orient="vertical", command=self._lb.yview)
+        self._lb.configure(yscrollcommand=sb.set)
+        self._lb.grid(row=0, column=0, sticky="nsew")
+        sb.grid(row=0, column=1, sticky="ns")
+
+        self._status = ttk.Label(self, foreground="#555555")
+        self._status.grid(row=2, column=0, sticky="w", pady=(2, 0))
+
+        if on_activate:
+            self._lb.bind("<Double-Button-1>", lambda e: self._aktivieren())
+            self._lb.bind("<Return>", lambda e: self._aktivieren())
+
+        self.set_items(items)
+
+    def set_items(self, items):
+        """Ersetzt die durchsuchte Objektliste (Suchtext bleibt erhalten)."""
+        self._items = list(items)
+        self._filtern()
+
+    def focus_search(self):
+        self.winfo_children()[0].focus_set()
+
+    def get_selected(self):
+        return [self._shown[i] for i in self._lb.curselection()]
+
+    def _passt(self, obj, begriffe):
+        text = f"{self._id_of(obj)} {self._display(obj)}".lower()
+        return all(b in text for b in begriffe)
+
+    def _filtern(self):
+        begriffe = self._suche.get().lower().split()
+        self._shown = [o for o in self._items if self._passt(o, begriffe)]
+        self._lb.delete(0, tk.END)
+        for o in self._shown:
+            self._lb.insert(tk.END, self._display(o))
+        self._status.config(text=f"{len(self._shown)} von {len(self._items)} Treffern")
+
+    def _aktivieren(self):
+        auswahl = self.get_selected()
+        if auswahl and self._on_activate:
+            self._on_activate(auswahl[0])
