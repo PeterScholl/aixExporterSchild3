@@ -232,8 +232,8 @@ class Generator():
                                       "⛔ Lerngruppen konnten nicht geholt werden (siehe Console) - bitte Verbindungseinstellungen prüfen.")
                     return self._auto_bericht(protokoll, abgeschlossen=False)
                 protokoll.append(f"✅ {len(self.lerngruppen)} Lerngruppen geholt")
-                if self.letzte_ausschluss_meldung:
-                    protokoll.append(self.letzte_ausschluss_meldung.rstrip("\n"))
+                if self.letzte_lade_meldung:
+                    protokoll.append(self.letzte_lade_meldung.rstrip("\n"))
 
             elif step == WorkflowStep.LOOKUPS_ERSTELLT:
                 self.generateLookups()
@@ -329,6 +329,9 @@ class Generator():
         )
         if jahrgangsteams_aktiv:
             zeilen.append(f"- Jahrgangsteams konfiguriert für: {', '.join(jahrgangsteams_aktiv)}")
+        anzahl_eigene = sum(len(v) for v in self.zusatz_objekte.values())
+        if anzahl_eigene:
+            zeilen.append(f"- {anzahl_eigene} eigene Objekte (Schüler/Lehrer/Lerngruppen) sind angelegt und werden nach jedem Laden eingefügt")
         if self.schueler_ausschluss:
             zeilen.append(f"- {len(self.schueler_ausschluss)} Schüler stehen auf der Ausschlussliste und werden nicht verarbeitet")
         if self.noTeams:
@@ -402,7 +405,12 @@ class Generator():
         # edit_schueler_ausschluss()/wende_schueler_ausschluss_an()). Der Name wird mitgespeichert,
         # damit die Liste lesbar bleibt, auch wenn der Schüler nicht mehr in self.schueler steht.
         self.schueler_ausschluss = {}
-        self.letzte_ausschluss_meldung = ""  # Log des letzten wende_schueler_ausschluss_an()
+        # Eigene, nicht aus Schild stammende Objekte (siehe edit_eigene_objekte()/
+        # wende_zusatz_objekte_an()): {"schueler": [...], "lehrer": [...], "lerngruppen": [...]},
+        # jeweils Liste von Dicts mit den Feldern des Schild-Objekts (IDs manuell vergeben, ab 900000).
+        self.zusatz_objekte = {"schueler": [], "lehrer": [], "lerngruppen": []}
+        # Log der Nachbearbeitung nach dem letzten frischen Abzug (eigene Objekte, Ausschlussliste)
+        self.letzte_lade_meldung = ""
         sv.setConfig(self.base_url, (self.username, self.password))
         if os.path.exists("server.pem"):
             sv.verify="server.pem"
@@ -488,9 +496,9 @@ class Generator():
             # sie mit den neuen Daten erneut erstellt wurden.
             for flag in ("schueler_csv", "sus_extern_csv", "lehrer_csv"):
                 self.exportedFlags.pop(flag, None)
-            # Ausgeschlossene Schüler sofort wieder entfernen, bevor irgendein Folgeschritt
-            # (idsSchuelerZuLerngruppen, TeamBez, ...) sie sieht.
-            self.letzte_ausschluss_meldung = self.wende_schueler_ausschluss_an()
+            # Eigene Objekte einfügen und ausgeschlossene Schüler wieder entfernen, bevor irgendein
+            # Folgeschritt (idsSchuelerZuLerngruppen, TeamBez, ...) die Daten sieht.
+            self.letzte_lade_meldung = self.wende_zusatz_objekte_an() + self.wende_schueler_ausschluss_an()
 
         return lerngruppen_export
 
@@ -1263,6 +1271,43 @@ class Generator():
             klasse = None  # z.B. Lookup-Dicts noch nicht erstellt
         return f'{s.get("id")} - {s.get("nachname", "?")}, {s.get("vorname", "?")} ({klasse or "ohne Klasse"})'
 
+    def wende_zusatz_objekte_an(self) -> str:
+        """Fügt die eigenen Objekte (self.zusatz_objekte) in self.schueler/lehrer/lerngruppen ein -
+        direkt nach einem frischen Abzug (lerngruppenHolen), VOR der Ausschlussliste. Bei
+        ID-Kollision mit einem Schild-Objekt gewinnt Schild: das eigene Objekt wird NICHT
+        übernommen und eine deutliche Warnung ausgegeben (der Nutzer soll den eigenen Eintrag
+        ändern). Übernommene Objekte tragen "zusatzObjekt": True (z.B. für die Anzeige) und ggf.
+        "referenzIdEigen" (feste Referenz-ID, siehe _wende_referenz_id_mapping_an). Gibt einen
+        Logtext zurück ("" wenn es keine eigenen Objekte gibt)."""
+        text = ""
+        namen = {"schueler": "Schüler", "lehrer": "Lehrer", "lerngruppen": "Lerngruppen"}
+        for typ, label in namen.items():
+            eigene = self.zusatz_objekte.get(typ, [])
+            if not eigene:
+                continue
+            # bereits früher eingefügte eigene Objekte zuerst entfernen (idempotent)
+            liste = [o for o in getattr(self, typ, []) if not o.get("zusatzObjekt")]
+            schild_ids = {o.get("id") for o in liste}
+            uebernommen = 0
+            for eigen in eigene:
+                if eigen.get("id") in schild_ids:
+                    text += (f"⚠️ Eigenes Objekt ({label}) mit ID {eigen.get('id')} kollidiert mit einem Schild-Eintrag "
+                             f"- der Schild-Eintrag wird verwendet, bitte den eigenen Eintrag ändern!\n")
+                    continue
+                obj = dict(eigen, zusatzObjekt=True)
+                if typ == "schueler":
+                    obj.setdefault("idsLerngruppen", [])
+                elif typ == "lehrer":
+                    obj.setdefault("idsLerngruppen", [])
+                    obj.setdefault("idsKlassenleitung", [])
+                else:
+                    obj.setdefault("idsLehrer", [])
+                liste.append(obj)
+                uebernommen += 1
+            setattr(self, typ, liste)
+            text += f"➕ {uebernommen} eigene Objekte ({label}) eingefügt\n"
+        return text
+
     def wende_schueler_ausschluss_an(self) -> str:
         """Entfernt alle Schüler der Ausschlussliste (self.schueler_ausschluss) aus self.schueler,
         dem Lookup-Dict und den idsSchueler der Lerngruppen. Wird direkt nach jedem frischen
@@ -1351,6 +1396,149 @@ class Generator():
         win.wait_window()
 
         return self.wende_schueler_ausschluss_an()
+
+    def edit_eigene_objekte(self, master) -> str:
+        """Dialog "Eigene Objekte" ("Dauerhafte Einstellungen"): pflegt self.zusatz_objekte -
+        eigene Schüler, Lehrer und Lerngruppen ("Kurse"), die nicht aus Schild kommen. Je Typ ein
+        Reiter mit Suchliste (SearchSelectList) links und Formular rechts. IDs vergibt der Nutzer
+        manuell; "Neu" schlägt die nächste freie ID ab 900000 vor. Beziehungen (wer in welcher
+        Lerngruppe sitzt/sie unterrichtet) gehören NICHT hierher, sondern in die Zusatzzuweisungen.
+        Änderungen wirken erst nach dem nächsten "Lerngruppen holen" (siehe
+        wende_zusatz_objekte_an). Gibt "" zurück."""
+        def optionen(liste):
+            return [(o.get("id"), str(o.get("kuerzelAnzeige") or o.get("kuerzel") or o.get("id")))
+                    for o in getattr(self, liste, [])]
+        kursarten = sorted({lg.get("kursartKuerzel") for lg in getattr(self, "lerngruppen", []) if lg.get("kursartKuerzel")})
+        # Typ -> (Reiter-Titel, Anzeige-Funktion, Felder (Schlüssel, Beschriftung, Art, Pflicht))
+        specs = {
+            "schueler": ("Schüler", lambda o: f"{o.get('id')} - {o.get('nachname', '')}, {o.get('vorname', '')}", [
+                ("id", "ID", "id", True), ("vorname", "Vorname", "text", True), ("nachname", "Nachname", "text", True),
+                ("status", "Status (2 aktiv, 6 extern)", "status", True), ("idJahrgang", "Jahrgang", "jahrgaenge", False),
+                ("idKlasse", "Klasse", "klassen", False), ("referenzIdEigen", "Feste Referenz-ID", "text", False)]),
+            "lehrer": ("Lehrer", lambda o: f"{o.get('id')} - {o.get('kuerzel', '')} ({o.get('nachname', '')}, {o.get('vorname', '')})", [
+                ("id", "ID", "id", True), ("kuerzel", "Kürzel", "text", True), ("vorname", "Vorname", "text", True),
+                ("nachname", "Nachname", "text", True), ("referenzIdEigen", "Feste Referenz-ID", "text", False)]),
+            "lerngruppen": ("Lerngruppen", lambda o: f"{o.get('id')} - {o.get('bezeichnung', '')}", [
+                ("id", "ID", "id", True), ("bezeichnung", "Bezeichnung", "text", True),
+                ("kursartKuerzel", "Kursart-Kürzel", "kursart", False)]),
+        }
+
+        win = tk.Toplevel(master)
+        win.title("Eigene Objekte")
+        win.transient(master)
+        win.grab_set()
+        win.geometry("760x460")
+        win.columnconfigure(0, weight=1)
+        win.rowconfigure(0, weight=1)
+        nb = ttk.Notebook(win)
+        nb.grid(row=0, column=0, sticky="nsew", padx=8, pady=8)
+
+        def reiter(typ):
+            titel, anzeige, felder = specs[typ]
+            frame = ttk.Frame(nb)
+            nb.add(frame, text=titel)
+            frame.columnconfigure(0, weight=1)
+            frame.columnconfigure(1, weight=1)
+            frame.rowconfigure(0, weight=1)
+            eigene = self.zusatz_objekte.setdefault(typ, [])
+            vars_, combos, zustand = {}, {}, {"aktuell": None}
+
+            form = ttk.Frame(frame)
+            form.grid(row=0, column=1, sticky="nsew", padx=8, pady=8)
+            form.columnconfigure(1, weight=1)
+            for r, (key, lbl, art, pflicht) in enumerate(felder):
+                ttk.Label(form, text=lbl + (" *" if pflicht else "")).grid(row=r, column=0, sticky="w", pady=3)
+                var = tk.StringVar()
+                vars_[key] = var
+                if art in ("jahrgaenge", "klassen"):
+                    combos[key] = {label: i for i, label in optionen(art)}
+                    w = ttk.Combobox(form, textvariable=var, values=[""] + list(combos[key]), state="readonly")
+                elif art == "status":
+                    w = ttk.Combobox(form, textvariable=var, values=["2", "6"], state="readonly")
+                elif art == "kursart":
+                    w = ttk.Combobox(form, textvariable=var, values=kursarten)  # frei überschreibbar
+                else:
+                    w = ttk.Entry(form, textvariable=var)
+                w.grid(row=r, column=1, sticky="ew", pady=3)
+
+            def naechste_id():
+                return max([899999] + [o.get("id", 0) for o in eigene]) + 1
+
+            def neu():
+                zustand["aktuell"] = None
+                for key, var in vars_.items():
+                    var.set("")
+                vars_["id"].set(str(naechste_id()))
+                if "status" in vars_:
+                    vars_["status"].set("2")
+
+            def laden(obj):
+                zustand["aktuell"] = obj
+                for key, var in vars_.items():
+                    wert = obj.get(key)
+                    if key in combos:
+                        wert = next((l for l, i in combos[key].items() if i == wert), "" if wert is None else str(wert))
+                    var.set("" if wert is None else str(wert))
+
+            def uebernehmen():
+                neu_obj = {}
+                for key, lbl, art, pflicht in felder:
+                    roh = vars_[key].get().strip()
+                    if pflicht and not roh:
+                        messagebox.showwarning("Hinweis", f"Bitte '{lbl}' ausfüllen.", parent=win)
+                        return
+                    if art == "id" or art == "status":
+                        try:
+                            neu_obj[key] = int(roh)
+                        except ValueError:
+                            messagebox.showwarning("Hinweis", f"'{lbl}' muss eine ganze Zahl sein.", parent=win)
+                            return
+                    elif art in ("jahrgaenge", "klassen"):
+                        neu_obj[key] = combos[key].get(roh)
+                    elif art == "kursart" or key == "referenzIdEigen":
+                        if roh:
+                            neu_obj[key] = roh
+                        elif art == "kursart":
+                            neu_obj[key] = None  # Schlüssel muss existieren (TeamBez-Prüfung)
+                    else:
+                        neu_obj[key] = roh
+                if any(o is not zustand["aktuell"] and o.get("id") == neu_obj["id"] for o in eigene):
+                    messagebox.showwarning("Hinweis", f"Die ID {neu_obj['id']} ist bei den eigenen Objekten schon vergeben.", parent=win)
+                    return
+                if zustand["aktuell"] in eigene:
+                    eigene[eigene.index(zustand["aktuell"])] = neu_obj
+                else:
+                    eigene.append(neu_obj)
+                zustand["aktuell"] = neu_obj
+                liste.set_items(eigene)
+
+            def loeschen():
+                if zustand["aktuell"] in eigene:
+                    eigene.remove(zustand["aktuell"])
+                    liste.set_items(eigene)
+                neu()
+
+            liste = SearchSelectList(frame, eigene, display=anzeige, multi=False, height=12, on_select=laden)
+            liste.grid(row=0, column=0, sticky="nsew", padx=8, pady=8)
+            btns = ttk.Frame(form)
+            btns.grid(row=len(felder), column=0, columnspan=2, sticky="e", pady=10)
+            ttk.Button(btns, text="Neu", command=neu).pack(side="left", padx=3)
+            ttk.Button(btns, text="Übernehmen", command=uebernehmen).pack(side="left", padx=3)
+            ttk.Button(btns, text="Löschen", command=loeschen).pack(side="left", padx=3)
+            neu()
+
+        for typ in specs:
+            reiter(typ)
+
+        fuss = ttk.Frame(win)
+        fuss.grid(row=1, column=0, sticky="ew", padx=8, pady=(0, 8))
+        ttk.Label(fuss, foreground="#555555",
+                  text="Änderungen wirken nach dem nächsten 'Lerngruppen holen'. Beziehungen (Schüler/Lehrer\n"
+                       "in Lerngruppen) werden unter 'Zusatzzuweisungen' festgelegt.").pack(side="left")
+        ttk.Button(fuss, text="Schließen", command=win.destroy).pack(side="right")
+        win.protocol("WM_DELETE_WINDOW", win.destroy)
+        win.wait_window()
+        return ""
 
     def edit_schueler_aufraeumen(self, master) -> str:
         """Dialog zur Pflege von self.schueler_aufraeumen_werte UND (über den eigenen Button
@@ -1610,7 +1798,9 @@ class Generator():
         count_id = 0
         for obj in getattr(self, art, []):
             objid = obj.get(idBez)
-            ref = mapping[objid] if objid in mapping else mapping.get(str(objid))
+            # Eigene Objekte (siehe wende_zusatz_objekte_an) können eine feste Referenz-ID
+            # mitbringen - sie hat Vorrang vor Zuordnung und Standard-Fallback.
+            ref = obj.get("referenzIdEigen") or (mapping[objid] if objid in mapping else mapping.get(str(objid)))
             if ref is not None:
                 obj["referenzId"] = ref
                 count_ref += 1

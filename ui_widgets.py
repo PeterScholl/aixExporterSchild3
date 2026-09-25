@@ -152,8 +152,9 @@ class SearchSelectList(ttk.Frame):
     Auswahl abfragen: get_selected() (Liste der Objekte); Inhalt tauschen: set_items()."""
 
     def __init__(self, master, items, display, id_of=lambda o: o.get("id"), multi=True,
-                 on_activate=None, height=10, **kwargs):
+                 on_activate=None, height=10, on_select=None, **kwargs):
         super().__init__(master, **kwargs)
+        self._on_select = on_select
         self._display = display
         self._id_of = id_of
         self._on_activate = on_activate
@@ -181,6 +182,8 @@ class SearchSelectList(ttk.Frame):
         self._status = ttk.Label(self, foreground="#555555")
         self._status.grid(row=2, column=0, sticky="w", pady=(2, 0))
 
+        if on_select:
+            self._lb.bind("<<ListboxSelect>>", lambda e: self._auswahl_geaendert())
         if on_activate:
             self._lb.bind("<Double-Button-1>", lambda e: self._aktivieren())
             self._lb.bind("<Return>", lambda e: self._aktivieren())
@@ -209,6 +212,11 @@ class SearchSelectList(ttk.Frame):
         for o in self._shown:
             self._lb.insert(tk.END, self._display(o))
         self._status.config(text=f"{len(self._shown)} von {len(self._items)} Treffern")
+
+    def _auswahl_geaendert(self):
+        auswahl = self.get_selected()
+        if auswahl and self._on_select:
+            self._on_select(auswahl[0])
 
     def _aktivieren(self):
         auswahl = self.get_selected()
