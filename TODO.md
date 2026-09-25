@@ -17,12 +17,12 @@ Alle drei Punkte landen im Dropdown "Dauerhafte Einstellungen", werden in `statu
   - Dialog "Schüler ausschließen" (Dauerhafte Einstellungen): Schüler über Schritt-0-Widget suchen, hinzufügen/entfernen.
   - Angewandt **zentral und früh** (nach `lerngruppenHolen`/`ergaenzeSchueler`, vor `idsSchuelerZuLerngruppen`), damit ausgeschlossene Schüler nirgends mehr auftauchen (Team-Präfix-Ermittlung, IDs prüfen, alle CSVs). Log-Zeile mit Anzahl + Namen, Eintrag in BESONDERHEITEN.
   - Offen: Ausgeschlossene, die in Schild nicht (mehr) vorkommen, in der Liste belassen und markieren?
-- [ ] **Schritt 2 - Eigene Objekte (Schüler, Lehrer, Lerngruppen/"Kurse")**
+- [x] **Schritt 2 - Eigene Objekte (Schüler, Lehrer, Lerngruppen/"Kurse")**
   - Pflichtfelder je Typ anhand der echten Objekte in `status.json` festlegen; Dialog zum Anlegen/Ändern/Löschen; Speicherung z.B. `self.zusatz_objekte = {"schueler": [...], "lehrer": [...], "lerngruppen": [...]}`.
   - Beim Laden aus Schild zusammenführen: bei ID-Kollision **gewinnt der Schild-Eintrag**, das eigene Objekt wird nicht übernommen und der Nutzer bekommt eine deutliche Warnung ("bitte eigenen Eintrag mit ID x ändern").
   - Entschieden: IDs werden vom Nutzer **manuell** vergeben; der Dialog schlägt beim Anlegen die nächste freie ID ab 900000 vor (überschreibbar). Eindeutigkeit innerhalb der eigenen Objekte wird geprüft.
   - Entschieden: Die bestehende CSV-Funktion "Zusätzliche Schüler" bleibt unverändert **parallel** bestehen (sie hängt nur Zeilen an die `Student.csv` an, ohne Schild-Objekte/IDs).
-- [ ] **Schritt 3 - Zusatzzuweisungen**
+- [x] **Schritt 3 - Zusatzzuweisungen**
   - Neuer Menüpunkt "Zusatzzuweisungen": Liste von Einträgen `{lerngruppen_ids (nicht leer), schueler_ids (evtl. leer), lehrer_ids (evtl. leer)}`, Auswahl je Feld über das Schritt-0-Widget (ID und Name), auch eigene Objekte aus Schritt 2 wählbar.
   - Angewandt **nach** `idsSchuelerZuLerngruppen`/`idsLerngruppenZuLehrern` (fügt die Verknüpfungen in beide Richtungen hinzu), also im Auto-Ablauf als eigener protokollierter Schritt; Warnung bei nicht (mehr) existierenden IDs, ausgeschlossene Schüler (Schritt 1) werden ignoriert und gemeldet.
-- [ ] **Abschluss:** README + TODO_erledigt aktualisieren, Auto-Bericht/BESONDERHEITEN um alle drei Einstellungen ergänzen.
+- [x] **Abschluss:** README + TODO_erledigt aktualisieren, Auto-Bericht/BESONDERHEITEN um alle drei Einstellungen ergänzen.

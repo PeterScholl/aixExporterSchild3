@@ -34,7 +34,7 @@ Für einen Test ohne eigenen SVWS-Server können folgende Daten unter dem Button
 Im Button-Grid steht nur noch der eigentliche Ablauf-Pfad (Verbindung → Daten holen → Zuordnen → Export, siehe [Button-Führung](#button-führung-farben)). Alles andere ist in zwei Dropdown-Buttons direkt unter der Menüleiste ausgelagert:
 
 - **Werkzeuge**: jederzeit nutzbare Hilfs- und Kontrollfunktionen ohne feste Reihenfolge - Statistik anzeigen, generateLookupDicts, ClearScreen, Suche, LeereLerngruppenLöschen, ErgänzeSchülerAusDB, ListeTeamBez, Übersicht Lernplattformen, IDs prüfen, ErgänzeLehrerAusDB, ZuordnungUebersicht, Schüler aufräumen.
-- **Dauerhafte Einstellungen**: Konfiguration, die man selten ändert - Serverzertifikat laden, TeamBezRewriteBearbeiten, Jahrgangsteams, Teams nicht erstellen, BezeichnungsMusterBearbeiten, Zusätzliche Schüler.
+- **Dauerhafte Einstellungen**: Konfiguration, die man selten ändert - Serverzertifikat laden, TeamBezRewriteBearbeiten, Jahrgangsteams, Teams nicht erstellen, BezeichnungsMusterBearbeiten, Zusätzliche Schüler, Schüler ausschließen, Eigene Objekte, Zusatzzuweisungen.
 
 Die wenigen Einträge davon, die Teil der Pflicht-/Optional-Kette sind (z.B. generateLookupDicts, Jahrgangsteams), werden dort genauso farbig markiert wie die Grid-Buttons.
 
@@ -144,6 +144,18 @@ Alle folgenden Punkte liegen im Dropdown **"Werkzeuge"**:
 ### Zusätzliche Schüler
 
 (Menüpunkt **Zusätzliche Schüler**, Dropdown "Dauerhafte Einstellungen") Liest eine CSV-Datei im selben Format wie die Ausgabe von `schueler_csv` ein (Spalten `ReferenzId;Vorname;Nachname;Klasse;Arbeitsgruppen;Cloud#Kurs;Cloud#Gruppe`, Trennzeichen `;`) und merkt sich deren Zeilen in `status.json`. Sie werden beim nächsten Erzeugen der echten `Student.csv` automatisch angehängt - z.B. für Schüler, die nicht in Schild3 geführt werden, aber trotzdem ein MNSpro-Konto brauchen. Die Anzahl wird deutlich im Ergebnistext angezeigt (`➕ N zusätzliche Schüler ... angehängt`); ein neu eingelesener Datei-Inhalt ersetzt die bisher gespeicherten Zeilen.
+
+### Schüler ausschließen
+
+(Menüpunkt **Schüler ausschließen**, Dropdown "Dauerhafte Einstellungen") Pflegt eine Liste von Schülern, die grundsätzlich nicht verarbeitet werden - z.B. ein Schüler, der garantiert nicht exportiert werden soll, auch wenn er versehentlich aus Schild kommt. Die Suche findet Schüler über Teile des Namens oder die ID (Leerzeichen werden ignoriert). Die Liste steht (mit Namen) in `status.json` und wird nach **jedem** "Lerngruppen holen" (auch in Auto) sofort wieder angewandt: ausgeschlossene Schüler verschwinden aus den Schülerdaten und den Lerngruppen, bevor irgendein Folgeschritt sie sieht. Das Log nennt jeweils, wer entfernt wurde. "Wieder aufnehmen" wirkt nach einem erneuten "Lerngruppen holen".
+
+### Eigene Objekte
+
+(Menüpunkt **Eigene Objekte**, Dropdown "Dauerhafte Einstellungen") Legt eigene Schüler, Lehrer und Lerngruppen an, die nicht aus Schild kommen. Die IDs vergibt man selbst ("Neu" schlägt die nächste freie ID ab 900000 vor). Die Objekte werden nach jedem "Lerngruppen holen" eingefügt; bei einer ID-Kollision mit einem Schild-Eintrag **gewinnt Schild**, das eigene Objekt wird nicht übernommen und das Log warnt deutlich, den eigenen Eintrag zu ändern. Optional kann ein Objekt eine feste Referenz-ID mitbringen, die Vorrang vor der Referenz-ID-Zuordnung hat. Beziehungen (wer in welcher Lerngruppe sitzt oder sie unterrichtet) legt man unter *Zusatzzuweisungen* fest.
+
+### Zusatzzuweisungen
+
+(Menüpunkt **Zusatzzuweisungen**, Dropdown "Dauerhafte Einstellungen") Jeder Eintrag ordnet eine (evtl. leere) Schülermenge und eine (evtl. leere) Lehrermenge einer nicht leeren Menge von Lerngruppen zu. Die Auswahl erfolgt komfortabel per ID oder Namensteil; bei Lerngruppen steht die Team-Bezeichnung in Klammern, so findet man z.B. mit `EF-L` den Lateinkurs der EF. Die Zuweisungen wirken beim Durchlauf von `idsSchuelerZuLerngruppen`/`idsLerngruppenZuLehrern` (also auch in Auto); nicht vorhandene IDs (z.B. ausgeschlossene Schüler) werden ignoriert und gemeldet. Eigene Lerngruppen ohne Schüler werden als Fehler gemeldet, da für sie keine Team-Bezeichnung gebildet werden kann.
 
 ### Export-Dateien erstellen
 

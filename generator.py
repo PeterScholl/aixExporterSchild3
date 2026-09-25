@@ -242,6 +242,8 @@ class Generator():
             elif step == WorkflowStep.SCHUELER_ZU_LERNGRUPPEN:
                 anzahl = self.addSuSIdsZuLerngruppen()
                 protokoll.append(f"✅ {anzahl} Schüler-Verknüpfungen zu Lerngruppen erstellt")
+                if self.letzte_zuweisungs_meldung:
+                    protokoll.append(self.letzte_zuweisungs_meldung.rstrip("\n"))
 
             elif step == WorkflowStep.TEAMBEZ_ERSTELLT:
                 protokoll.append(self.addTeamBezZuLerngruppen().rstrip("\n"))
@@ -265,6 +267,8 @@ class Generator():
             elif step == WorkflowStep.LERNGRUPPEN_ZU_LEHRERN:
                 anzahl = self.addLerngruppenIdsZuLuL()
                 protokoll.append(f"✅ {anzahl} Lerngruppen-Verknüpfungen zu Lehrern erstellt")
+                if self.letzte_zuweisungs_meldung:
+                    protokoll.append(self.letzte_zuweisungs_meldung.rstrip("\n"))
 
             elif step == WorkflowStep.KLASSENLEITUNG_ZU_LEHRERN:
                 anzahl = self.addKlassenleitungsIdsZuLuL()
@@ -332,6 +336,8 @@ class Generator():
         anzahl_eigene = sum(len(v) for v in self.zusatz_objekte.values())
         if anzahl_eigene:
             zeilen.append(f"- {anzahl_eigene} eigene Objekte (Schüler/Lehrer/Lerngruppen) sind angelegt und werden nach jedem Laden eingefügt")
+        if self.zusatz_zuweisungen:
+            zeilen.append(f"- {len(self.zusatz_zuweisungen)} Zusatzzuweisung(en) (Schüler/Lehrer zu Lerngruppen) werden angewandt")
         if self.schueler_ausschluss:
             zeilen.append(f"- {len(self.schueler_ausschluss)} Schüler stehen auf der Ausschlussliste und werden nicht verarbeitet")
         if self.noTeams:
@@ -411,6 +417,10 @@ class Generator():
         self.zusatz_objekte = {"schueler": [], "lehrer": [], "lerngruppen": []}
         # Log der Nachbearbeitung nach dem letzten frischen Abzug (eigene Objekte, Ausschlussliste)
         self.letzte_lade_meldung = ""
+        # Zusatzzuweisungen (siehe edit_zusatz_zuweisungen()/wende_zusatz_zuweisungen_an()): Liste von
+        # {"lerngruppen": [IDs, nicht leer], "schueler": [IDs, evtl. leer], "lehrer": [IDs, evtl. leer]}
+        self.zusatz_zuweisungen = []
+        self.letzte_zuweisungs_meldung = ""  # Log des letzten wende_zusatz_zuweisungen_an()
         sv.setConfig(self.base_url, (self.username, self.password))
         if os.path.exists("server.pem"):
             sv.verify="server.pem"
@@ -627,6 +637,11 @@ class Generator():
         for l in self.lookupDict.get("lehrer", {}).values():
             l.setdefault("idsLerngruppen", [])
 
+        # Zusatzzuweisungen (Lehrer-Teil) zuerst in lg["idsLehrer"] eintragen (auch Besitzer-
+        # Markierung beim Lehrer-Export nutzt idsLehrer), die Schleife unten leitet daraus dann
+        # wie gewohnt lehrer["idsLerngruppen"] ab
+        self.letzte_zuweisungs_meldung = self.wende_zusatz_zuweisungen_an("lehrer")
+
         # alle lerngruppen durchgehen
         for lg in getattr(self, "lerngruppen", []):
             lg_id = lg["id"]
@@ -651,6 +666,10 @@ class Generator():
         for lg in self.lookupDict.get("lerngruppen", {}).values():
             lg.setdefault("idsSchueler", [])
 
+        # Zusatzzuweisungen (Schüler-Teil) zuerst in schueler["idsLerngruppen"] eintragen - die
+        # Schleife unten leitet daraus dann wie gewohnt lg["idsSchueler"] ab
+        meldung = self.wende_zusatz_zuweisungen_an("schueler")
+
         # alle Schüler durchgehen
         for schueler in getattr(self, "schueler", []):
             sid = schueler["id"]
@@ -660,6 +679,13 @@ class Generator():
                     if sid not in ids:   # doppelte vermeiden
                         ids.append(sid)
                         count+=1
+
+        # eigene Lerngruppen ohne Schüler sind ein Fehler (TeamBez kann für sie nicht erstellt werden)
+        for lg in getattr(self, "lerngruppen", []):
+            if lg.get("zusatzObjekt") and not lg.get("idsSchueler"):
+                meldung += (f"⚠️ FEHLER: Eigene Lerngruppe {lg.get('id')} ({lg.get('bezeichnung')}) hat keine Schüler - "
+                            f"bitte unter 'Zusatzzuweisungen' Schüler zuweisen!\n")
+        self.letzte_zuweisungs_meldung = meldung
 
         return count
 
@@ -1271,6 +1297,43 @@ class Generator():
             klasse = None  # z.B. Lookup-Dicts noch nicht erstellt
         return f'{s.get("id")} - {s.get("nachname", "?")}, {s.get("vorname", "?")} ({klasse or "ohne Klasse"})'
 
+    def wende_zusatz_zuweisungen_an(self, art: str) -> str:
+        """Wendet den Schüler- ("schueler") bzw. Lehrer-Teil ("lehrer") der Zusatzzuweisungen an:
+        trägt die Lerngruppen-IDs bei den Schülern (schueler["idsLerngruppen"]) bzw. die Lehrer-IDs
+        in den Lerngruppen (lg["idsLehrer"]) ein - die bestehenden Schritte
+        addSuSIdsZuLerngruppen/addLerngruppenIdsZuLuL leiten daraus die Gegenrichtung ab.
+        Idempotent. Warnt bei nicht (mehr) vorhandenen IDs (z.B. ausgeschlossene Schüler, andere
+        Abschnitte). Erwartet erzeugte Lookup-Dicts. Gibt einen Logtext zurück ("" ohne Zuweisungen)."""
+        if not self.zusatz_zuweisungen:
+            return ""
+        lookup_lg = self.lookupDict.get("lerngruppen", {})
+        lookup_personen = self.lookupDict.get(art, {})
+        label = "Schüler" if art == "schueler" else "Lehrer"
+        neu = 0
+        fehlend = {"Lerngruppen": set(), label: set()}
+        for eintrag in self.zusatz_zuweisungen:
+            lgs = [lookup_lg[i] for i in eintrag.get("lerngruppen", []) if i in lookup_lg]
+            fehlend["Lerngruppen"].update(i for i in eintrag.get("lerngruppen", []) if i not in lookup_lg)
+            for pid in eintrag.get(art, []):
+                person = lookup_personen.get(pid)
+                if person is None:
+                    fehlend[label].add(pid)
+                    continue
+                for lg in lgs:
+                    if art == "schueler":
+                        ziel, wert = person.setdefault("idsLerngruppen", []), lg["id"]
+                    else:
+                        ziel, wert = lg.setdefault("idsLehrer", []), pid
+                    if wert not in ziel:
+                        ziel.append(wert)
+                        neu += 1
+        text = f"🔗 Zusatzzuweisungen ({label}): {neu} Verknüpfungen hinzugefügt\n"
+        for was, ids in fehlend.items():
+            if ids:
+                text += (f"⚠️ Zusatzzuweisungen: {was} mit ID {', '.join(str(i) for i in sorted(ids, key=str))} "
+                         f"nicht vorhanden (ausgeschlossen, nicht geladen oder gelöscht) - ignoriert\n")
+        return text
+
     def wende_zusatz_objekte_an(self) -> str:
         """Fügt die eigenen Objekte (self.zusatz_objekte) in self.schueler/lehrer/lerngruppen ein -
         direkt nach einem frischen Abzug (lerngruppenHolen), VOR der Ausschlussliste. Bei
@@ -1536,6 +1599,135 @@ class Generator():
                   text="Änderungen wirken nach dem nächsten 'Lerngruppen holen'. Beziehungen (Schüler/Lehrer\n"
                        "in Lerngruppen) werden unter 'Zusatzzuweisungen' festgelegt.").pack(side="left")
         ttk.Button(fuss, text="Schließen", command=win.destroy).pack(side="right")
+        win.protocol("WM_DELETE_WINDOW", win.destroy)
+        win.wait_window()
+        return ""
+
+    def edit_zusatz_zuweisungen(self, master) -> str:
+        """Dialog "Zusatzzuweisungen" ("Dauerhafte Einstellungen"): pflegt self.zusatz_zuweisungen -
+        Einträge, die eine (evtl. leere) Schülermenge und eine (evtl. leere) Lehrermenge einer
+        NICHT leeren Lerngruppenmenge zuordnen. Oben die Liste der Einträge, darunter je eine
+        Auswahl für Lerngruppen, Schüler und Lehrer (SearchSelectList: Suche per ID oder Namensteil,
+        "Hinzufügen" übernimmt die Markierten). Eigene Objekte sind wählbar, sobald sie per
+        "Lerngruppen holen" eingefügt wurden. Angewandt wird beim nächsten Durchlauf von
+        idsSchuelerZuLerngruppen/idsLerngruppenZuLehrern (bzw. Auto). Gibt "" zurück."""
+        if not getattr(self, "lerngruppen", []):
+            messagebox.showinfo("Zusatzzuweisungen",
+                "Keine Lerngruppen vorhanden - bitte zuerst Lerngruppen holen.", parent=master)
+            return ""
+
+        win = tk.Toplevel(master)
+        win.title("Zusatzzuweisungen")
+        win.transient(master)
+        win.grab_set()
+        win.geometry("1040x700")
+        win.columnconfigure(0, weight=1)
+        win.rowconfigure(1, weight=1)
+
+        lehrer_anzeige = lambda o: f"{o.get('id')} - {o.get('kuerzel', '')} ({o.get('nachname', '')}, {o.get('vorname', '')})"
+        # Team-Bezeichnung (falls schon erzeugt) in Klammern: enthält Klasse/Jahrgang, z.B. "EF - L-GK1"
+        lg_anzeige = lambda o: (f"{o.get('id')} - {o.get('bezeichnung', '')}"
+                                + (f" ({o['teamBez']})" if o.get("teamBez") else ""))
+        quellen = {
+            "lerngruppen": ("Lerngruppen (mind. 1)", getattr(self, "lerngruppen", []), lg_anzeige),
+            "schueler": ("Schüler (optional)", getattr(self, "schueler", []), self._schueler_anzeige),
+            "lehrer": ("Lehrer (optional)", getattr(self, "lehrer", []), lehrer_anzeige),
+        }
+        eintraege = self.zusatz_zuweisungen
+
+        def kurz(e):
+            namen = {o["id"]: o for o in quellen["lerngruppen"][1]}
+            lgs = ", ".join(str(namen[i].get("bezeichnung", i)) if i in namen else f"{i}(?)" for i in e.get("lerngruppen", []))
+            return f"[{lgs}]  +{len(e.get('schueler', []))} Schüler, +{len(e.get('lehrer', []))} Lehrer"
+
+        # --- Panels: Suche (oben) + Auswahl (unten) je Objektart ---
+        panels = {}
+
+        def panel(parent, art):
+            titel, items, anzeige = quellen[art]
+            rahmen = ttk.LabelFrame(parent, text=titel)
+            rahmen.columnconfigure(0, weight=1)
+            rahmen.rowconfigure(0, weight=1)
+            such = SearchSelectList(rahmen, items, display=anzeige, height=7)
+            such.grid(row=0, column=0, sticky="nsew", padx=4, pady=4)
+            gewaehlt = []  # geordnete IDs
+            nach_id = {o.get("id"): o for o in items}
+            lb = tk.Listbox(rahmen, height=6, exportselection=False, selectmode=tk.EXTENDED)
+
+            def aktualisieren():
+                lb.delete(0, tk.END)
+                for i in gewaehlt:
+                    lb.insert(tk.END, anzeige(nach_id[i]) if i in nach_id else f"{i} (nicht geladen)")
+
+            def hinzufuegen():
+                for o in such.get_selected():
+                    if o.get("id") not in gewaehlt:
+                        gewaehlt.append(o.get("id"))
+                aktualisieren()
+
+            def entfernen():
+                for idx in reversed(lb.curselection()):
+                    del gewaehlt[idx]
+                aktualisieren()
+
+            ttk.Button(rahmen, text="↓ Markierte hinzufügen", command=hinzufuegen).grid(row=1, column=0, sticky="e", padx=4)
+            lb.grid(row=2, column=0, sticky="nsew", padx=4, pady=4)
+            rahmen.rowconfigure(2, weight=1)
+            ttk.Button(rahmen, text="Markierte entfernen", command=entfernen).grid(row=3, column=0, sticky="e", padx=4, pady=(0, 4))
+            panels[art] = {"get": lambda: list(gewaehlt),
+                           "set": lambda ids: (gewaehlt.clear(), gewaehlt.extend(ids), aktualisieren())}
+            return rahmen
+
+        zustand = {"aktuell": None}
+
+        liste = SearchSelectList(win, eintraege, display=kurz, id_of=lambda o: "", multi=False, height=5,
+                                 on_select=lambda e: laden(e))
+        liste.grid(row=0, column=0, sticky="ew", padx=8, pady=8)
+
+        editor = ttk.Frame(win)
+        editor.grid(row=1, column=0, sticky="nsew", padx=8)
+        for c in range(3):
+            editor.columnconfigure(c, weight=1)
+        editor.rowconfigure(0, weight=1)
+        for c, art in enumerate(("lerngruppen", "schueler", "lehrer")):
+            panel(editor, art).grid(row=0, column=c, sticky="nsew", padx=3)
+
+        def neu():
+            zustand["aktuell"] = None
+            for art in panels:
+                panels[art]["set"]([])
+
+        def laden(eintrag):
+            zustand["aktuell"] = eintrag
+            for art in panels:
+                panels[art]["set"](eintrag.get(art, []))
+
+        def uebernehmen():
+            eintrag = {art: panels[art]["get"]() for art in ("lerngruppen", "schueler", "lehrer")}
+            if not eintrag["lerngruppen"]:
+                messagebox.showwarning("Hinweis", "Bitte mindestens eine Lerngruppe wählen.", parent=win)
+                return
+            if zustand["aktuell"] in eintraege:
+                eintraege[eintraege.index(zustand["aktuell"])] = eintrag
+            else:
+                eintraege.append(eintrag)
+            zustand["aktuell"] = eintrag
+            liste.set_items(eintraege)
+
+        def loeschen():
+            if zustand["aktuell"] in eintraege:
+                eintraege.remove(zustand["aktuell"])
+                liste.set_items(eintraege)
+            neu()
+
+        fuss = ttk.Frame(win)
+        fuss.grid(row=2, column=0, sticky="ew", padx=8, pady=8)
+        ttk.Label(fuss, foreground="#555555",
+                  text="Wirkt beim nächsten Durchlauf von idsSchuelerZuLerngruppen/idsLerngruppenZuLehrern (bzw. Auto).").pack(side="left")
+        ttk.Button(fuss, text="Schließen", command=win.destroy).pack(side="right", padx=3)
+        ttk.Button(fuss, text="Löschen", command=loeschen).pack(side="right", padx=3)
+        ttk.Button(fuss, text="Eintrag übernehmen", command=uebernehmen).pack(side="right", padx=3)
+        ttk.Button(fuss, text="Neuer Eintrag", command=neu).pack(side="right", padx=3)
         win.protocol("WM_DELETE_WINDOW", win.destroy)
         win.wait_window()
         return ""

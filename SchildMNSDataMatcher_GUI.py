@@ -45,7 +45,7 @@ class ReportApp(tk.Tk):
         einstellungen_menu_texts = [
             "Serverzertifikat laden", "TeamBezRewriteBearbeiten", "Jahrgangsteams",
             "Teams nicht erstellen", "BezeichnungsMusterBearbeiten", "Zusätzliche Schüler",
-            "Schüler ausschließen", "Eigene Objekte",
+            "Schüler ausschließen", "Eigene Objekte", "Zusatzzuweisungen",
         ]
 
         tooltip = {
@@ -73,6 +73,7 @@ class ReportApp(tk.Tk):
             "BezeichnungsMusterBearbeiten": "Regex-Muster auf die Team-Bezeichnung einer Lerngruppe,\ndie VOR der kursartKuerzel-Regel über die Zielkategorie\n(Arbeitsgruppe/Cloud#Kurs/Cloud#Gruppe) entscheiden.\nReihenfolge in der Liste = Priorität, erstes Match gewinnt.",
             "Schüler ausschließen": "Pflegt eine Liste von Schülern, die grundsätzlich nicht verarbeitet\nwerden (Suche per Namensteil oder ID). Wird in status.json gespeichert\nund bei jedem 'Lerngruppen holen' erneut angewandt - auch wenn der\nSchüler versehentlich aus Schild exportiert wird.",
             "Eigene Objekte": "Legt eigene Schüler, Lehrer und Lerngruppen an, die nicht aus Schild\nkommen (IDs manuell, Vorschlag ab 900000). Werden nach jedem\n'Lerngruppen holen' eingefügt; bei ID-Kollision gewinnt Schild und es\nerscheint eine Warnung.",
+            "Zusatzzuweisungen": "Ordnet eine (evtl. leere) Schüler- und Lehrermenge einer\nnicht leeren Lerngruppenmenge zu (Auswahl per ID oder Namensteil).\nWirkt beim Durchlauf von idsSchuelerZuLerngruppen /\nidsLerngruppenZuLehrern bzw. Auto.",
             "Zusätzliche Schüler": "Liest eine CSV-Datei im Format der schueler_csv-Ausgabe ein\nund merkt sich deren Zeilen - werden beim nächsten Erzeugen von\n'Student.csv' automatisch angehängt (z.B. für Schüler, die\nnicht in Schild3 geführt werden).",
             "ZuordnungUebersicht": "Kontrolle vor dem Export: zeigt je Zielkategorie\n(Arbeitsgruppe/Cloud#Kurs/Cloud#Gruppe) die betroffenen Lerngruppen,\nwarnt vor nicht klassifizierten Lerngruppen und vor Team-Bezeichnungen,\ndie in mehreren Zielkategorien gleichzeitig auftauchen.",
             "Schüler aufräumen": "Eigener, vom normalen schueler_csv-Export komplett unabhängiger\nExport: pro Jahrgang ein fester Wert je Zielspalte, wörtlich\nfür alle Schüler dieses Jahrgangs (keine Lerngruppen-Berechnung).\nleer = Spalte löschen, * = bestehende Zuordnung bleibt beim\nMNSpro-Import erhalten. Auslösen über 'Schüler.csv erstellen'\nim Dialog; der normale schueler_csv-Button bleibt unbeeinflusst.",
@@ -211,6 +212,8 @@ class ReportApp(tk.Tk):
                 if ergebnis:
                     self.report_text.insert(tk.END, ergebnis)
                     self.report_text.see(tk.END)
+            case "Zusatzzuweisungen":
+                self.generator.edit_zusatz_zuweisungen(self)
             case "Eigene Objekte":
                 self.generator.edit_eigene_objekte(self)
             case "Zusätzliche Schüler":
@@ -243,11 +246,11 @@ class ReportApp(tk.Tk):
                 self.report_text.see(tk.END)
             case "idsLerngruppenZuLehrern":
                 anz = self.generator.addLerngruppenIdsZuLuL()
-                self.report_text.insert(tk.END,f"Es wurden {anz} Verknüpfungen erstellt\n")
+                self.report_text.insert(tk.END,f"Es wurden {anz} Verknüpfungen erstellt\n" + self.generator.letzte_zuweisungs_meldung)
                 self.report_text.see(tk.END)
             case "idsSchuelerZuLerngruppen":
                 anz = self.generator.addSuSIdsZuLerngruppen()
-                self.report_text.insert(tk.END,f"Es wurden {anz} Verknüpfungen erstellt\n")
+                self.report_text.insert(tk.END,f"Es wurden {anz} Verknüpfungen erstellt\n" + self.generator.letzte_zuweisungs_meldung)
                 self.report_text.see(tk.END)
             case "TeamBezRewriteBearbeiten":
                 self.generator.edit_teambez_rewrite(self)

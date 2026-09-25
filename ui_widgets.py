@@ -203,7 +203,8 @@ class SearchSelectList(ttk.Frame):
 
     def _passt(self, obj, begriffe):
         text = f"{self._id_of(obj)} {self._display(obj)}".lower()
-        return all(b in text for b in begriffe)
+        kompakt = text.replace(" ", "")  # "EF-L" soll auch "EF - L-GK1" finden
+        return all(b in text or b in kompakt for b in begriffe)
 
     def _filtern(self):
         begriffe = self._suche.get().lower().split()
