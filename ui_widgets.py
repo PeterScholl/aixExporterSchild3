@@ -101,6 +101,20 @@ class DropdownMenuButton(tk.Button):
         self.popup.deiconify()
         self.popup.lift()
         self._offen = True
+        self._pruefe_app_aktiv()
+
+    def _pruefe_app_aktiv(self):
+        """Schließt das Popup, sobald die Anwendung den Fokus verliert (Alt+Tab, Klick in ein
+        anderes Programm, Desktop anzeigen) oder minimiert wird. Das Popup ist -topmost und würde
+        sonst über allen anderen Fenstern stehen bleiben, denn <Button-1> (siehe
+        _on_global_click) bekommt nur Klicks innerhalb dieser Anwendung mit. Per after()-Polling
+        statt <FocusOut>, weil FocusOut auch bei jedem Fokuswechsel innerhalb der App feuert."""
+        if not self._offen:
+            return
+        if self.focus_displayof() is None or self.winfo_toplevel().state() == "iconic":
+            self._close()
+            return
+        self._poll_id = self.after(200, self._pruefe_app_aktiv)
 
     def _on_global_click(self, event):
         if not self._offen:
@@ -119,4 +133,7 @@ class DropdownMenuButton(tk.Button):
 
     def _close(self):
         self._offen = False
+        if getattr(self, "_poll_id", None):
+            self.after_cancel(self._poll_id)
+            self._poll_id = None
         self.popup.withdraw()
