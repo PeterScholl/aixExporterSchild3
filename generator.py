@@ -447,9 +447,11 @@ class Generator():
         result = show_config_gui(root, cfg, focus_password=focus_password)
        
         if (result):
-            print(f"Result: {result}")
+            # Passwort nie in die Console schreiben - nur maskiert ausgeben
+            sichtbar = {k: ("***" if k == "password" and v else v) for k, v in result.items()}
+            print(f"Result: {sichtbar}")
             for key, value in result.items():
-                print(f"Key {key} erhält Value: {value}")
+                print(f"Key {key} erhält Value: {sichtbar[key]}")
                 setattr(self, key, value)
             sv.setConfig(self.base_url, (self.username, self.password))
 
