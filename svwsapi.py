@@ -270,7 +270,13 @@ def gibLernplattformenUebersicht() -> dict:
 def gibLerngruppen(abschnitt_id: int, lernplattform_id: int) -> dict:
     """Holt den Datenexport für eine Lernplattform im angegebenen Abschnitt"""
     #url = f"{base_url}/v1/lernplattformen/{lernplattform_id}/{abschnitt_id}"
-    url = f"{base_url.replace('/db', '/api/external')}/v1/lernplattformen/{lernplattform_id}/{abschnitt_id}"
+    # NICHT base_url.replace('/db', ...) auf den kompletten String anwenden - das trifft auch den
+    # Host, wenn dieser mit "db" beginnt (z.B. Host "db" oder "db.schule.de": "https://" + Host
+    # ergibt dann selbst schon die Zeichenfolge "/db"). Stattdessen nur im Pfad-Anteil ersetzen,
+    # den urlparse korrekt vom Host trennt - unabhängig vom Hostnamen.
+    parsed = urlparse(base_url)
+    pfad_api_external = parsed.path.replace("/db", "/api/external", 1)
+    url = f"{parsed.scheme}://{parsed.netloc}{pfad_api_external}/v1/lernplattformen/{lernplattform_id}/{abschnitt_id}"
     print(f"Die URL für den API-Endpunkt: {url}")
     response = _get(url)
 
