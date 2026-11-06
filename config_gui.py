@@ -185,4 +185,4 @@ if __name__ == "__main__":
     save_config(cfg)
     messagebox.showinfo("Gespeichert", f"Konfiguration gespeichert nach {CONFIG_PATH}")
             
-    print("Geladene Konfig:", json.dumps(cfg, ensure_ascii=False, indent=2))
+    print("Geladene Konfig:", json.dumps({**cfg, "password": "***"}, ensure_ascii=False, indent=2))
