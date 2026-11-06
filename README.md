@@ -157,6 +157,8 @@ Alle folgenden Punkte liegen im Dropdown **"Werkzeuge"**:
 
 (Menüpunkt **Zusatzzuweisungen**, Dropdown "Dauerhafte Einstellungen") Jeder Eintrag ordnet eine (evtl. leere) Schülermenge und eine (evtl. leere) Lehrermenge einer nicht leeren Menge von Lerngruppen zu. Die Auswahl erfolgt komfortabel per ID oder Namensteil; bei Lerngruppen steht die Team-Bezeichnung in Klammern, so findet man z.B. mit `EF-L` den Lateinkurs der EF. Die Zuweisungen wirken beim Durchlauf von `idsSchuelerZuLerngruppen`/`idsLerngruppenZuLehrern` (also auch in Auto); nicht vorhandene IDs (z.B. ausgeschlossene Schüler) werden ignoriert und gemeldet. Eigene Lerngruppen ohne Schüler werden als Fehler gemeldet, da für sie keine Team-Bezeichnung gebildet werden kann.
 
+**Lerngruppen werden dabei über die Team-Bezeichnung (teamBez) gespeichert, nicht über die ID** - die Lerngruppen-ID ist bei einem frischen Abzug aus Schild nicht stabil, die TeamBez bleibt dagegen gleich. Eine Lerngruppe ohne (noch) erzeugte TeamBez lässt sich hier daher nicht auswählen (zuerst `TeamBezErstellen` ausführen); fehlt eine gespeicherte TeamBez beim Anwenden (z.B. weil sich die Bezeichnung geändert hat), wird das deutlich gewarnt. Lehrer werden weiterhin über die ID identifiziert (als stabil angenommen - andernfalls wäre das Kürzel die naheliegende Alternative).
+
 ### Export-Dateien erstellen
 
 Der eigentliche Export geschieht über die drei Buttons schueler_csv, sus_extern_csv und lehrer_csv - wenn alles gut läuft werden die entsprechenden csv-Dateien erstellt. Ein Blick in **ZuordnungUebersicht** vorher lohnt sich, um Überraschungen zu vermeiden. Der **Auto**-Button (siehe oben) bereitet alles bis hierhin automatisch vor, erstellt die drei Export-Dateien aber bewusst nicht selbst.
