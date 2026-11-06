@@ -211,7 +211,6 @@ class Generator():
                 # Export noch fehlt.
                 if not done_fn(self):
                     export_ausstehend = True
-                    protokoll.append(f"➡️ {step.value} - bitte manuell über den passenden Button erstellen")
                 continue
 
             if done_fn(self) and step not in IMMER_NEU_AUSFUEHREN:
